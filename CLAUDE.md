@@ -26,10 +26,8 @@ npm run dev
 
 ### Core Components
 
-- **IFabricClient** (`src/client/IFabricClient.ts`): Interface defining all Fabric operations (connect, scenes, objects, bulk)
-- **MVFabricClient** (`src/client/MVFabricClient.ts`): Uses actual MVMF libraries with Node.js shims (API-compatible)
-- **MockFabricClient** (`src/client/MockFabricClient.ts`): Stub implementation for offline development
-- **Config** (`src/config.ts`): Loads `~/.fabric-mcp.json` for connection profiles and storage backends
+- **MVFabricClient** (`src/client/MVFabricClient.ts`): Fabric client using MVMF libraries with Node.js shims
+- **Config** (`src/config.ts`): Loads `~/.config/fabric-mcp/config.json` for connection profiles and storage backends
 - **Tools** (`src/tools/`): MCP tool implementations for connection, scenes, objects, bulk operations, and resources
 
 ### Vendor Libraries
@@ -85,7 +83,5 @@ Server config lives at `~/.config/fabric-mcp/config.json`:
 
 ## Development Notes
 
-- **MVFabricClient** (default): Uses actual MVMF libraries - fully API-compatible with SceneAssembler
-- **MockFabricClient**: For offline testing
-- Switch implementations by changing import in `src/index.ts`
+- **MVFabricClient**: Uses actual MVMF libraries - fully API-compatible with SceneAssembler
 - For large scenes (800+ objects), use pagination in list operations and SEARCH for filtering

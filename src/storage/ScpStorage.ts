@@ -22,14 +22,25 @@ export class ScpStorage {
     this.config = config;
   }
 
+  isConfigured(): boolean {
+    return !!(this.config.scpHost && this.config.scpUser && this.config.scpKeyPath && this.config.scpRemotePath && this.config.resourceUrlPrefix);
+  }
+
+  private ensureConfigured(): void {
+    if (!this.isConfigured()) {
+      throw new Error('Storage not configured. Add scpHost, scpUser, scpKeyPath, scpRemotePath, and resourceUrlPrefix to your profile.');
+    }
+  }
+
   private async connect(): Promise<SftpClient> {
+    this.ensureConfigured();
     const sftp = new SftpClient();
-    const keyPath = expandPath(this.config.scpKeyPath);
+    const keyPath = expandPath(this.config.scpKeyPath!);
     const privateKey = await readFile(keyPath, 'utf-8');
 
     await sftp.connect({
-      host: this.config.scpHost,
-      username: this.config.scpUser,
+      host: this.config.scpHost!,
+      username: this.config.scpUser!,
       privateKey,
     });
 
@@ -37,7 +48,7 @@ export class ScpStorage {
   }
 
   private async getRemotePath(sftp: SftpClient): Promise<string> {
-    let remotePath = this.config.scpRemotePath;
+    let remotePath = this.config.scpRemotePath!;
     if (remotePath.startsWith('~/')) {
       const cwd = await sftp.cwd();
       remotePath = remotePath.replace('~', cwd);
@@ -54,7 +65,7 @@ export class ScpStorage {
       const remotePath = join(baseRemotePath, filename);
       await sftp.put(localPath, remotePath);
       return {
-        url: this.config.resourceUrlPrefix + filename,
+        url: this.config.resourceUrlPrefix! + filename,
         filename,
       };
     } finally {
@@ -77,7 +88,7 @@ export class ScpStorage {
 
       return results.map(f => ({
         name: f.name,
-        url: this.config.resourceUrlPrefix + f.name,
+        url: this.config.resourceUrlPrefix! + f.name,
         size: f.size,
         lastModified: new Date(f.modifyTime),
       }));
@@ -99,6 +110,7 @@ export class ScpStorage {
   }
 
   getBaseUrl(): string {
-    return this.config.resourceUrlPrefix;
+    this.ensureConfigured();
+    return this.config.resourceUrlPrefix!;
   }
 }

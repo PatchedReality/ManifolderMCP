@@ -1,7 +1,6 @@
 // @ts-nocheck - MVMF libraries are untyped JavaScript
 import '../vendor/mv/index.js';
 
-import type { IFabricClient } from './IFabricClient.js';
 import type {
   BulkOperation,
   ConnectionStatus,
@@ -16,56 +15,7 @@ import { ClassIds } from '../types.js';
 
 declare const MV: any;
 
-// Handler class that extends NOTIFICATION to receive all callbacks properly
-class ClientHandler extends MV.MVMF.NOTIFICATION {
-  private client: MVFabricClient;
-  private pendingReady: Map<any, () => void> = new Map();
-
-  constructor(client: MVFabricClient) {
-    super();
-    this.client = client;
-  }
-
-  waitForReady(pObject: any): Promise<void> {
-    if (pObject.IsReady()) {
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      this.pendingReady.set(pObject, resolve);
-    });
-  }
-
-  onReadyState(pNotice: any) {
-    this.client._handleReadyState(pNotice);
-
-    // Check if any pending object is now ready
-    if (pNotice.pCreator?.IsReady()) {
-      const resolve = this.pendingReady.get(pNotice.pCreator);
-      if (resolve) {
-        this.pendingReady.delete(pNotice.pCreator);
-        resolve();
-      }
-    }
-  }
-
-  onInserted(pNotice: any) {
-    // Handle child insertions if needed
-  }
-
-  onUpdated(pNotice: any) {
-    // Handle updates if needed
-  }
-
-  onChanged(pNotice: any) {
-    // Handle changes if needed
-  }
-
-  onDeleting(pNotice: any) {
-    // Handle deletions if needed
-  }
-}
-
-export class MVFabricClient implements IFabricClient {
+export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   private pFabric: any = null;
   private pLnG: any = null;
   private pRMRoot: any = null;
@@ -75,31 +25,95 @@ export class MVFabricClient implements IFabricClient {
   private fabricUrl: string | null = null;
   private currentSceneId: string | null = null;
   private adminKey: string | null = null;
+  private loginAttempted = false;
 
   private objectCache: Map<string, any> = new Map();
-  private handler: ClientHandler;
+  private pendingReady: Map<any, { resolve: () => void; reject: (err: Error) => void }> = new Map();
   private connectResolve: (() => void) | null = null;
   private connectReject: ((err: Error) => void) | null = null;
 
   constructor() {
-    this.handler = new ClientHandler(this);
+    super();
+  }
+
+  private waitForReady(pObject: any, timeoutMs: number = 30000): Promise<void> {
+    if (pObject.IsReady()) {
+      return Promise.resolve();
+    }
+    if (pObject.ReadyState?.() === pObject.eSTATE?.ERROR) {
+      return Promise.reject(new Error('Object in error state'));
+    }
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingReady.delete(pObject);
+        reject(new Error(`Timeout waiting for object to be ready (state: ${pObject.ReadyState?.()})`));
+      }, timeoutMs);
+
+      this.pendingReady.set(pObject, {
+        resolve: () => { clearTimeout(timeoutId); resolve(); },
+        reject: (err: Error) => { clearTimeout(timeoutId); reject(err); }
+      });
+    });
+  }
+
+  onReadyState(pNotice: any) {
+    this.handleReadyState(pNotice);
+
+    const pending = this.pendingReady.get(pNotice.pCreator);
+    if (pending) {
+      if (pNotice.pCreator?.IsReady()) {
+        this.pendingReady.delete(pNotice.pCreator);
+        pending.resolve();
+      } else if (pNotice.pCreator?.ReadyState?.() === pNotice.pCreator?.eSTATE?.ERROR) {
+        this.pendingReady.delete(pNotice.pCreator);
+        pending.reject(new Error('Object failed to load'));
+      }
+    }
+  }
+
+  onInserted(pNotice: any) {
+    const pChild = pNotice.pCreator;
+    if (pChild?.twObjectIx) {
+      this.objectCache.set(pChild.twObjectIx.toString(), pChild);
+    }
+  }
+
+  onUpdated(pNotice: any) {
+    const pObject = pNotice.pCreator;
+    if (pObject?.twObjectIx) {
+      this.objectCache.set(pObject.twObjectIx.toString(), pObject);
+    }
+  }
+
+  onChanged(pNotice: any) {
+    const pObject = pNotice.pCreator;
+    if (pObject?.twObjectIx) {
+      this.objectCache.set(pObject.twObjectIx.toString(), pObject);
+    }
+  }
+
+  onDeleting(pNotice: any) {
+    const pObject = pNotice.pCreator;
+    if (pObject?.twObjectIx) {
+      this.objectCache.delete(pObject.twObjectIx.toString());
+    }
   }
 
   async connect(fabricUrl: string, adminKey: string): Promise<void> {
     this.fabricUrl = fabricUrl;
     this.adminKey = adminKey;
+    this.loginAttempted = false;
 
     return new Promise((resolve, reject) => {
       this.connectResolve = resolve;
       this.connectReject = reject;
 
       this.pFabric = new MV.MVRP.MSF(fabricUrl, MV.MVRP.MSF.eMETHOD.GET);
-      this.pFabric.Attach(this.handler);
+      this.pFabric.Attach(this);
     });
   }
 
-  // Called by ClientHandler.onReadyState
-  _handleReadyState(pNotice: any) {
+  private handleReadyState(pNotice: any) {
     if (pNotice.pCreator === this.pFabric) {
       if (this.pFabric.IsReady()) {
         this.pLnG = this.pFabric.GetLnG('map');
@@ -107,7 +121,7 @@ export class MVFabricClient implements IFabricClient {
           this.connectReject?.(new Error('Failed to get LnG "map" from fabric config'));
           return;
         }
-        this.pLnG.Attach(this.handler);
+        this.pLnG.Attach(this);
       } else if (this.pFabric.ReadyState() === this.pFabric.eSTATE.ERROR) {
         this.connectReject?.(new Error('Failed to load fabric config from ' + this.fabricUrl));
       }
@@ -125,7 +139,27 @@ export class MVFabricClient implements IFabricClient {
           this.connectReject = null;
         }
       } else if (state === this.pLnG.eSTATE.LOGGEDOUT) {
-        this.pLnG.Login('token=' + MV.MVMF.Escape(this.adminKey));
+        if (this.adminKey) {
+          if (this.loginAttempted) {
+            // Login failed - we tried and came back to LOGGEDOUT
+            this.connectReject?.(new Error('Login failed: invalid admin key or authentication error'));
+            this.connectResolve = null;
+            this.connectReject = null;
+          } else {
+            // First attempt - try to login
+            this.loginAttempted = true;
+            this.pLnG.Login('token=' + MV.MVMF.Escape(this.adminKey));
+          }
+        } else {
+          // Anonymous read-only access
+          this.connected = true;
+          this.loggedIn = false;
+          this.profile = 'default';
+          this.start();
+          this.connectResolve?.();
+          this.connectResolve = null;
+          this.connectReject = null;
+        }
       } else if (state === this.pLnG.eSTATE.DISCONNECTED) {
         if (this.connected) {
           this.connected = false;
@@ -139,18 +173,54 @@ export class MVFabricClient implements IFabricClient {
 
   private start() {
     this.pRMRoot = this.pLnG.Model_Open('RMRoot', 1);
-    this.pRMRoot.Attach(this.handler);
+    this.pRMRoot.Attach(this);
   }
 
   private waitForRootReady(): Promise<void> {
-    return this.handler.waitForReady(this.pRMRoot);
+    return this.waitForReady(this.pRMRoot);
   }
 
   private async openAndWait(modelType: string, objectId: number): Promise<any> {
     const pObject = this.pLnG.Model_Open(modelType, objectId);
-    pObject.Attach(this.handler);
-    await this.handler.waitForReady(pObject);
+    if (!pObject) {
+      throw new Error(`Failed to open ${modelType} with id ${objectId}`);
+    }
+    pObject.Attach(this);
+    await this.waitForReady(pObject);
     return pObject;
+  }
+
+  private static readonly OBJECT_TYPES = ['RMPObject', 'RMTObject', 'RMCObject'];
+
+  private static readonly CLASS_ID_TO_TYPE: Record<number, string> = {
+    [ClassIds.RMPObject]: 'RMPObject',
+    [ClassIds.RMTObject]: 'RMTObject',
+    [ClassIds.RMCObject]: 'RMCObject',
+  };
+
+  private async openWithKnownType(objectId: number, classId: number): Promise<any> {
+    const modelType = MVFabricClient.CLASS_ID_TO_TYPE[classId];
+    if (!modelType) {
+      throw new Error(`Unknown class ID: ${classId}`);
+    }
+    return await this.openAndWait(modelType, objectId);
+  }
+
+  private async openAnyObjectType(objectId: number): Promise<any> {
+    for (const modelType of MVFabricClient.OBJECT_TYPES) {
+      try {
+        return await this.openAndWait(modelType, objectId);
+      } catch {
+        // Try next type
+      }
+    }
+    throw new Error(`Could not open object ${objectId}`);
+  }
+
+  private enumAllChildTypes(pObject: any, callback: (child: any) => void): void {
+    for (const childType of MVFabricClient.OBJECT_TYPES) {
+      pObject.Child_Enum(childType, this, callback, null);
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -188,23 +258,27 @@ export class MVFabricClient implements IFabricClient {
     await this.waitForRootReady();
 
     const scenes: Scene[] = [];
+    const seenIds = new Set<string>();
     const enumCallback = (pRMXObject: any) => {
-      scenes.push({
-        id: pRMXObject.twObjectIx.toString(),
-        name: pRMXObject.pName?.wsRMPObjectId || `Scene ${pRMXObject.twObjectIx}`,
-        rootObjectId: pRMXObject.twObjectIx.toString(),
-      });
+      const id = pRMXObject.twObjectIx.toString();
+      if (seenIds.has(id)) return;
+      seenIds.add(id);
+
+      const name = pRMXObject.pName?.wsRMPObjectId
+        || pRMXObject.pName?.wsRMTObjectId
+        || pRMXObject.pName?.wsRMCObjectId
+        || `Object ${pRMXObject.twObjectIx}`;
+      scenes.push({ id, name, rootObjectId: id });
     };
 
-    this.pRMRoot.Child_Enum('RMPObject', this, enumCallback, null);
+    this.enumAllChildTypes(this.pRMRoot, enumCallback);
     return scenes;
   }
 
   async openScene(sceneId: string): Promise<RMPObject> {
     this.ensureConnected();
 
-    const twObjectIx = parseInt(sceneId);
-    const pObject = await this.openAndWait('RMPObject', twObjectIx);
+    const pObject = await this.openAnyObjectType(parseInt(sceneId));
 
     this.currentSceneId = sceneId;
     this.objectCache.set(sceneId, pObject);
@@ -273,14 +347,19 @@ export class MVFabricClient implements IFabricClient {
 
     let pScene = this.objectCache.get(sceneId);
     if (!pScene) {
-      pScene = await this.openAndWait('RMPObject', parseInt(sceneId));
+      pScene = await this.openAnyObjectType(parseInt(sceneId));
       this.objectCache.set(sceneId, pScene);
     }
 
     const objects: RMPObject[] = [];
+    const seenIds = new Set<string>();
     const collectObjects = (pObject: any) => {
+      const id = pObject.twObjectIx.toString();
+      if (seenIds.has(id)) return;
+      seenIds.add(id);
+
       objects.push(this.rmxToRMPObject(pObject));
-      pObject.Child_Enum('RMPObject', this, collectObjects, null);
+      this.enumAllChildTypes(pObject, collectObjects);
     };
 
     collectObjects(pScene);
@@ -298,7 +377,7 @@ export class MVFabricClient implements IFabricClient {
 
     let pObject = this.objectCache.get(objectId);
     if (!pObject) {
-      pObject = await this.openAndWait('RMPObject', parseInt(objectId));
+      pObject = await this.openAnyObjectType(parseInt(objectId));
       this.objectCache.set(objectId, pObject);
     }
 
@@ -310,7 +389,7 @@ export class MVFabricClient implements IFabricClient {
 
     let pParent = this.objectCache.get(params.parentId);
     if (!pParent) {
-      pParent = await this.openAndWait('RMPObject', parseInt(params.parentId));
+      pParent = await this.openAnyObjectType(parseInt(params.parentId));
       this.objectCache.set(params.parentId, pParent);
     }
 
@@ -366,7 +445,7 @@ export class MVFabricClient implements IFabricClient {
 
     let pObject = this.objectCache.get(params.objectId);
     if (!pObject) {
-      pObject = await this.openAndWait('RMPObject', parseInt(params.objectId));
+      pObject = await this.openAnyObjectType(parseInt(params.objectId));
       this.objectCache.set(params.objectId, pObject);
     }
 
@@ -404,8 +483,17 @@ export class MVFabricClient implements IFabricClient {
     }
 
     if (params.resource !== undefined) {
+      // Parse resource format: "sReference:sName" or just "sReference"
+      let sReference = params.resource;
+      let sName = '';
+      const colonIndex = params.resource.indexOf(':', params.resource.indexOf('://') + 3);
+      if (colonIndex > 0) {
+        sReference = params.resource.substring(0, colonIndex);
+        sName = params.resource.substring(colonIndex + 1);
+      }
       const response = await this.sendAction(pObject, 'RESOURCE', (payload: any) => {
-        payload.pResource.sReference = params.resource;
+        payload.pResource.sReference = sReference;
+        payload.pResource.sName = sName;
       });
       if (response.nResult !== 0) {
         throw new Error(`Failed to update resource: error ${response.nResult}`);
@@ -415,18 +503,36 @@ export class MVFabricClient implements IFabricClient {
     return this.getObject(params.objectId);
   }
 
-  async deleteObject(objectId: string): Promise<void> {
+  async deleteObject(objectId: string, allowUnknownType?: boolean): Promise<void> {
     this.ensureConnected();
 
-    const pObject = this.objectCache.get(objectId);
+    let pObject = this.objectCache.get(objectId);
     if (!pObject) {
-      throw new Error(`Object not found in cache: ${objectId}`);
+      if (!allowUnknownType) {
+        throw new Error(
+          `Object ${objectId} not in cache. Either load it first with get_object, ` +
+          `or set allowUnknownType: true to query the server (requires trying multiple object types).`
+        );
+      }
+      pObject = await this.openAnyObjectType(parseInt(objectId));
+      this.objectCache.set(objectId, pObject);
     }
 
     const parentId = pObject.twParentIx.toString();
     let pParent = this.objectCache.get(parentId);
     if (!pParent) {
-      pParent = await this.openAndWait('RMPObject', pObject.twParentIx);
+      const parentClassId = pObject.wClass_Parent;
+      if (parentClassId && MVFabricClient.CLASS_ID_TO_TYPE[parentClassId]) {
+        pParent = await this.openWithKnownType(pObject.twParentIx, parentClassId);
+      } else if (allowUnknownType) {
+        pParent = await this.openAnyObjectType(pObject.twParentIx);
+      } else {
+        throw new Error(
+          `Parent object ${parentId} not in cache and type unknown. ` +
+          `Set allowUnknownType: true to query the server.`
+        );
+      }
+      this.objectCache.set(parentId, pParent);
     }
 
     const response = await this.sendAction(pParent, 'RMPOBJECT_CLOSE', (payload: any) => {
@@ -446,7 +552,7 @@ export class MVFabricClient implements IFabricClient {
 
     let pObject = this.objectCache.get(objectId);
     if (!pObject) {
-      pObject = await this.openAndWait('RMPObject', parseInt(objectId));
+      pObject = await this.openAnyObjectType(parseInt(objectId));
       this.objectCache.set(objectId, pObject);
     }
 
@@ -540,10 +646,15 @@ export class MVFabricClient implements IFabricClient {
   }
 
   private rmxToRMPObject(rmx: any): RMPObject {
+    // Get name based on object class: 71=RMCObject, 72=RMTObject, 73=RMPObject
+    const name = rmx.pName?.wsRMPObjectId
+      || rmx.pName?.wsRMTObjectId
+      || rmx.pName?.wsRMCObjectId
+      || `Object ${rmx.twObjectIx}`;
     return {
       id: rmx.twObjectIx.toString(),
       parentId: rmx.twParentIx ? rmx.twParentIx.toString() : null,
-      name: rmx.pName?.wsRMPObjectId || `Object ${rmx.twObjectIx}`,
+      name,
       transform: {
         position: {
           x: rmx.pTransform?.vPosition?.dX || 0,
@@ -562,7 +673,9 @@ export class MVFabricClient implements IFabricClient {
           z: rmx.pTransform?.vScale?.dZ || 1,
         },
       },
-      resource: rmx.pResource?.sReference || null,
+      resource: rmx.pResource?.sReference
+        ? (rmx.pResource.sName ? `${rmx.pResource.sReference}:${rmx.pResource.sName}` : rmx.pResource.sReference)
+        : null,
       bound: rmx.pBound ? {
         min: { x: -rmx.pBound.dX / 2, y: -rmx.pBound.dY / 2, z: -rmx.pBound.dZ / 2 },
         max: { x: rmx.pBound.dX / 2, y: rmx.pBound.dY / 2, z: rmx.pBound.dZ / 2 },

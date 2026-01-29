@@ -4,14 +4,14 @@ import { join } from 'path';
 
 export interface ProfileConfig {
   fabricUrl: string;
-  adminKey: string;
-  // SCP/SSH storage settings
-  scpHost: string;
-  scpUser: string;
-  scpRemotePath: string;
-  scpKeyPath: string;
+  adminKey?: string;  // Optional for anonymous/read-only access
+  // SCP/SSH storage settings (optional for read-only profiles)
+  scpHost?: string;
+  scpUser?: string;
+  scpRemotePath?: string;
+  scpKeyPath?: string;
   // URL prefix for referencing uploaded resources in scenes (e.g. "/objects/")
-  resourceUrlPrefix: string;
+  resourceUrlPrefix?: string;
 }
 
 export interface FabricMCPConfig {

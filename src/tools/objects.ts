@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { IFabricClient } from '../client/IFabricClient.js';
+import type { MVFabricClient } from '../client/MVFabricClient.js';
 import { quaternionSchema, vector3Schema } from './schemas.js';
 
 export const objectTools = {
@@ -42,7 +42,13 @@ export const objectTools = {
     }),
   },
   delete_object: {
-    description: 'Delete an object and its children',
+    description: 'Delete an object and its children. Object must be in cache (loaded via get_object or list_objects first).',
+    inputSchema: z.object({
+      objectId: z.string().describe('ID of the object to delete'),
+    }),
+  },
+  delete_object_unknown_type: {
+    description: 'Delete an object when its type is unknown (not in cache). Queries the server trying multiple object types. Use only when delete_object fails due to object not being in cache.',
     inputSchema: z.object({
       objectId: z.string().describe('ID of the object to delete'),
     }),
@@ -57,7 +63,7 @@ export const objectTools = {
 };
 
 export async function handleListObjects(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: { sceneId: string; filter?: { namePattern?: string; type?: string } }
 ): Promise<string> {
   const objects = await client.listObjects(args.sceneId, args.filter);
@@ -74,7 +80,7 @@ export async function handleListObjects(
 }
 
 export async function handleGetObject(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: { objectId: string }
 ): Promise<string> {
   const obj = await client.getObject(args.objectId);
@@ -82,7 +88,7 @@ export async function handleGetObject(
 }
 
 export async function handleCreateObject(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: {
     parentId: string;
     name: string;
@@ -97,7 +103,7 @@ export async function handleCreateObject(
 }
 
 export async function handleUpdateObject(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: {
     objectId: string;
     name?: string;
@@ -112,15 +118,23 @@ export async function handleUpdateObject(
 }
 
 export async function handleDeleteObject(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: { objectId: string }
 ): Promise<string> {
-  await client.deleteObject(args.objectId);
+  await client.deleteObject(args.objectId, false);
+  return JSON.stringify({ success: true, deletedObjectId: args.objectId });
+}
+
+export async function handleDeleteObjectUnknownType(
+  client: MVFabricClient,
+  args: { objectId: string }
+): Promise<string> {
+  await client.deleteObject(args.objectId, true);
   return JSON.stringify({ success: true, deletedObjectId: args.objectId });
 }
 
 export async function handleMoveObject(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: { objectId: string; newParentId: string }
 ): Promise<string> {
   const obj = await client.moveObject(args.objectId, args.newParentId);

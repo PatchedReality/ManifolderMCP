@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { IFabricClient } from '../client/IFabricClient.js';
+import type { MVFabricClient } from '../client/MVFabricClient.js';
 
 export const sceneTools = {
   list_scenes: {
@@ -26,13 +26,13 @@ export const sceneTools = {
   },
 };
 
-export async function handleListScenes(client: IFabricClient): Promise<string> {
+export async function handleListScenes(client: MVFabricClient): Promise<string> {
   const scenes = await client.listScenes();
   return JSON.stringify({ scenes });
 }
 
 export async function handleOpenScene(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: { sceneId: string }
 ): Promise<string> {
   const root = await client.openScene(args.sceneId);
@@ -47,7 +47,7 @@ export async function handleOpenScene(
 }
 
 export async function handleCreateScene(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: { name: string }
 ): Promise<string> {
   const scene = await client.createScene(args.name);
@@ -55,7 +55,7 @@ export async function handleCreateScene(
 }
 
 export async function handleDeleteScene(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: { sceneId: string }
 ): Promise<string> {
   await client.deleteScene(args.sceneId);

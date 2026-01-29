@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { IFabricClient } from '../client/IFabricClient.js';
+import type { MVFabricClient } from '../client/MVFabricClient.js';
 import type { BulkOperation } from '../types.js';
 import { quaternionSchema, vector3Schema } from './schemas.js';
 
@@ -65,7 +65,7 @@ export const bulkTools = {
 };
 
 export async function handleBulkUpdate(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: { operations: BulkOperation[] }
 ): Promise<string> {
   const result = await client.bulkUpdate(args.operations);
@@ -73,7 +73,7 @@ export async function handleBulkUpdate(
 }
 
 export async function handleFindObjects(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: {
     sceneId: string;
     query: {

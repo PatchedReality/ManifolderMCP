@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { IFabricClient } from '../client/IFabricClient.js';
+import type { MVFabricClient } from '../client/MVFabricClient.js';
 import { getProfile } from '../config.js';
 
 export const connectionTools = {
@@ -20,13 +20,13 @@ export const connectionTools = {
 };
 
 export async function handleFabricConnect(
-  client: IFabricClient,
+  client: MVFabricClient,
   args: { profile?: string }
 ): Promise<string> {
   const profileName = args.profile ?? 'default';
   const profile = await getProfile(profileName);
 
-  await client.connect(profile.fabricUrl, profile.adminKey);
+  await client.connect(profile.fabricUrl, profile.adminKey || '');
 
   return JSON.stringify({
     success: true,
@@ -35,11 +35,11 @@ export async function handleFabricConnect(
   });
 }
 
-export async function handleFabricDisconnect(client: IFabricClient): Promise<string> {
+export async function handleFabricDisconnect(client: MVFabricClient): Promise<string> {
   await client.disconnect();
   return JSON.stringify({ success: true });
 }
 
-export function handleFabricStatus(client: IFabricClient): string {
+export function handleFabricStatus(client: MVFabricClient): string {
   return JSON.stringify(client.getStatus());
 }

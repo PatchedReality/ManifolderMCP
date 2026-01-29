@@ -9,7 +9,6 @@ import {
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { MVFabricClient } from './client/MVFabricClient.js';
-import type { IFabricClient } from './client/IFabricClient.js';
 import { getProfile } from './config.js';
 import { ScpStorage } from './storage/ScpStorage.js';
 
@@ -29,6 +28,7 @@ import {
   handleCreateObject,
   handleUpdateObject,
   handleDeleteObject,
+  handleDeleteObjectUnknownType,
   handleMoveObject,
   bulkTools,
   handleBulkUpdate,
@@ -51,7 +51,7 @@ const server = new Server(
   }
 );
 
-const client: IFabricClient = new MVFabricClient();
+const client = new MVFabricClient();
 let storage: ScpStorage | null = null;
 
 async function getStorage(): Promise<ScpStorage> {
@@ -127,6 +127,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case 'delete_object':
         result = await handleDeleteObject(client, args as { objectId: string });
+        break;
+      case 'delete_object_unknown_type':
+        result = await handleDeleteObjectUnknownType(client, args as { objectId: string });
         break;
       case 'move_object':
         result = await handleMoveObject(client, args as { objectId: string; newParentId: string });
