@@ -20,14 +20,16 @@ export const objectTools = {
     }),
   },
   create_object: {
-    description: 'Create a new object in the scene',
+    description: 'Create a new object in the scene. For regular 3D models, use resource="/objects/Model.glb". For template resources, use resource="action://scene" with resourceName="/objects/template.json".',
     inputSchema: z.object({
       parentId: z.string().describe('ID of the parent object'),
       name: z.string().describe('Name for the new object'),
       position: vector3Schema.optional().describe('Position (default: 0,0,0)'),
       rotation: quaternionSchema.optional().describe('Rotation quaternion (default: identity)'),
       scale: vector3Schema.optional().describe('Scale (default: 1,1,1)'),
-      resource: z.string().optional().describe('URL to a .glb or other resource'),
+      resource: z.string().optional().describe('For .glb models: "/objects/Model.glb". For templates: "action://scene"'),
+      resourceName: z.string().optional().describe('For template resources only: path to the JSON file, e.g. "/objects/template.json"'),
+      bound: vector3Schema.optional().describe('Bounding box size (default: 1,1,1). For templates, set to match objectBounds.'),
     }),
   },
   update_object: {
@@ -97,6 +99,8 @@ export async function handleCreateObject(
     rotation?: { x: number; y: number; z: number; w: number };
     scale?: { x: number; y: number; z: number };
     resource?: string;
+    resourceName?: string;
+    bound?: { x: number; y: number; z: number };
   }
 ): Promise<string> {
   const obj = await client.createObject(args);

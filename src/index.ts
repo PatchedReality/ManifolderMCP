@@ -5,7 +5,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { MVFabricClient } from './client/MVFabricClient.js';
@@ -14,6 +19,7 @@ import { ScpStorage } from './storage/ScpStorage.js';
 
 import {
   connectionTools,
+  handleListProfiles,
   handleFabricConnect,
   handleFabricDisconnect,
   handleFabricStatus,
@@ -37,6 +43,11 @@ import {
   handleUploadResource,
   handleListResources,
   handleDeleteResource,
+  handleMoveResource,
+  templateResourceTools,
+  handleGetTemplateResourceSchema,
+  handleValidateTemplateResource,
+  ActionResourceType,
 } from './tools/index.js';
 
 const server = new Server(
@@ -47,6 +58,7 @@ const server = new Server(
   {
     capabilities: {
       tools: {},
+      resources: {},
     },
   }
 );
@@ -68,6 +80,7 @@ const allTools = {
   ...objectTools,
   ...bulkTools,
   ...resourceTools,
+  ...templateResourceTools,
 };
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -80,6 +93,42 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const AGENT_GUIDE_PATH = join(__dirname, '..', 'src', 'agent-guide.md');
+
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  return {
+    resources: [
+      {
+        uri: 'fabric://guide',
+        name: 'Fabric MCP Agent Guide',
+        description: 'Workflows and patterns for AI agents: template resources, object manipulation, bulk operations',
+        mimeType: 'text/markdown',
+      },
+    ],
+  };
+});
+
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const { uri } = request.params;
+
+  if (uri === 'fabric://guide') {
+    const content = readFileSync(AGENT_GUIDE_PATH, 'utf-8');
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'text/markdown',
+          text: content,
+        },
+      ],
+    };
+  }
+
+  throw new Error(`Unknown resource: ${uri}`);
+});
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
@@ -88,8 +137,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     switch (name) {
       // Connection tools
+      case 'list_profiles':
+        result = await handleListProfiles();
+        break;
       case 'fabric_connect':
-        result = await handleFabricConnect(client, args as { profile?: string });
+        result = await handleFabricConnect(client, args as { profile: string });
         break;
       case 'fabric_disconnect':
         result = await handleFabricDisconnect(client);
@@ -152,6 +204,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case 'delete_resource':
         result = await handleDeleteResource(await getStorage(), args as { resourceName: string });
+        break;
+      case 'move_resource':
+        result = await handleMoveResource(await getStorage(), args as { sourceName: string; destName: string });
+        break;
+
+      // Template resource tools
+      case 'get_template_resource_schema':
+        result = handleGetTemplateResourceSchema();
+        break;
+      case 'validate_template_resource':
+        result = await handleValidateTemplateResource(args as { filePath: string; type: ActionResourceType });
         break;
 
       default:

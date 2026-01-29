@@ -1,12 +1,16 @@
 import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
-import { getProfile } from '../config.js';
+import { getProfile, loadConfig } from '../config.js';
 
 export const connectionTools = {
+  list_profiles: {
+    description: 'List available Fabric connection profiles from config',
+    inputSchema: z.object({}),
+  },
   fabric_connect: {
-    description: 'Connect to a Fabric server using a config profile',
+    description: 'Connect to a Fabric server. REQUIRED: specify which profile to use (e.g., "earth", "default"). Call list_profiles first if unsure.',
     inputSchema: z.object({
-      profile: z.string().optional().describe('Config profile name (default: "default")'),
+      profile: z.string().describe('Config profile name (REQUIRED - e.g., "earth", "default")'),
     }),
   },
   fabric_disconnect: {
@@ -19,11 +23,20 @@ export const connectionTools = {
   },
 };
 
+export async function handleListProfiles(): Promise<string> {
+  const config = await loadConfig();
+  const profiles = Object.entries(config).map(([name, profile]) => ({
+    name,
+    fabricUrl: profile.fabricUrl,
+  }));
+  return JSON.stringify({ profiles });
+}
+
 export async function handleFabricConnect(
   client: MVFabricClient,
-  args: { profile?: string }
+  args: { profile: string }
 ): Promise<string> {
-  const profileName = args.profile ?? 'default';
+  const profileName = args.profile;
   const profile = await getProfile(profileName);
 
   await client.connect(profile.fabricUrl, profile.adminKey || '');

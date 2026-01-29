@@ -1,6 +1,6 @@
 import SftpClient from 'ssh2-sftp-client';
 import { readFile } from 'fs/promises';
-import { basename, join } from 'path';
+import { basename, dirname, join } from 'path';
 import { expandPath, type ProfileConfig } from '../config.js';
 
 export interface UploadResult {
@@ -63,6 +63,12 @@ export class ScpStorage {
     try {
       const baseRemotePath = await this.getRemotePath(sftp);
       const remotePath = join(baseRemotePath, filename);
+
+      const remoteDir = dirname(remotePath);
+      if (remoteDir !== baseRemotePath) {
+        await sftp.mkdir(remoteDir, true);
+      }
+
       await sftp.put(localPath, remotePath);
       return {
         url: this.config.resourceUrlPrefix! + filename,
@@ -104,6 +110,29 @@ export class ScpStorage {
       const baseRemotePath = await this.getRemotePath(sftp);
       const remotePath = join(baseRemotePath, resourceName);
       await sftp.delete(remotePath);
+    } finally {
+      await sftp.end();
+    }
+  }
+
+  async move(sourceName: string, destName: string): Promise<{ url: string; filename: string }> {
+    const sftp = await this.connect();
+
+    try {
+      const baseRemotePath = await this.getRemotePath(sftp);
+      const sourcePath = join(baseRemotePath, sourceName);
+      const destPath = join(baseRemotePath, destName);
+
+      const destDir = dirname(destPath);
+      if (destDir !== baseRemotePath) {
+        await sftp.mkdir(destDir, true);
+      }
+
+      await sftp.rename(sourcePath, destPath);
+      return {
+        url: this.config.resourceUrlPrefix! + destName,
+        filename: destName,
+      };
     } finally {
       await sftp.end();
     }

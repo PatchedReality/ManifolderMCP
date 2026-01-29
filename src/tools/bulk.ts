@@ -13,6 +13,8 @@ const operationSchema = z.discriminatedUnion('type', [
       rotation: quaternionSchema.optional(),
       scale: vector3Schema.optional(),
       resource: z.string().optional(),
+      resourceName: z.string().optional(),
+      bound: vector3Schema.optional(),
     }),
   }),
   z.object({

@@ -402,7 +402,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       payload.pType.bMovable = 0;
       payload.pOwner.twRPersonaIx = 1;
       payload.pResource.qwResource = 0;
-      payload.pResource.sName = '';
+      payload.pResource.sName = params.resourceName || '';
       payload.pResource.sReference = params.resource || '';
       payload.pTransform.vPosition.dX = params.position?.x || 0;
       payload.pTransform.vPosition.dY = params.position?.y || 0;
@@ -414,9 +414,9 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       payload.pTransform.vScale.dX = params.scale?.x || 1;
       payload.pTransform.vScale.dY = params.scale?.y || 1;
       payload.pTransform.vScale.dZ = params.scale?.z || 1;
-      payload.pBound.dX = 1;
-      payload.pBound.dY = 1;
-      payload.pBound.dZ = 1;
+      payload.pBound.dX = params.bound?.x || 1;
+      payload.pBound.dY = params.bound?.y || 1;
+      payload.pBound.dZ = params.bound?.z || 1;
     });
 
     if (response.nResult !== 0) {
@@ -435,7 +435,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
         scale: params.scale || { x: 1, y: 1, z: 1 },
       },
       resource: params.resource || null,
-      resourceName: null,
+      resourceName: params.resourceName || null,
       bound: null,
       classId: ClassIds.RMPObject,
       children: [],

@@ -66,6 +66,8 @@ export interface CreateObjectParams {
   rotation?: Quaternion;
   scale?: Vector3;
   resource?: string;
+  resourceName?: string;
+  bound?: Vector3;
 }
 
 export interface UpdateObjectParams {
