@@ -82,8 +82,8 @@ You can define multiple profiles for different environments:
 }
 ```
 
-Use `fabric_connect` with the profile name:
-- `fabric_connect` → uses "default"
+Use `list_profiles` to see available profiles, then `fabric_connect` with the profile name:
+- `fabric_connect profile:"default"` → uses "default"
 - `fabric_connect profile:"staging"` → uses "staging"
 
 ## Claude Code Setup
@@ -103,9 +103,10 @@ claude mcp add fabric node ~/fabric-mcp/dist/index.js
 ## Available Tools
 
 ### Connection
-- `fabric_connect` - Connect using a config profile
+- `list_profiles` - List available connection profiles from config
+- `fabric_connect` - Connect using a config profile (required parameter)
 - `fabric_disconnect` - Disconnect from server
-- `fabric_status` - Get connection state
+- `fabric_status` - Get connection state and current scene info
 
 ### Scenes
 - `list_scenes` - List all scenes
@@ -114,28 +115,41 @@ claude mcp add fabric node ~/fabric-mcp/dist/index.js
 - `delete_scene` - Delete scene and children
 
 ### Objects
-- `list_objects` - List objects in a scene
+- `list_objects` - List objects in a scene with optional filtering
 - `get_object` - Get object details
-- `create_object` - Create new object
+- `create_object` - Create new object (supports GLB models and template resources)
 - `update_object` - Update object properties (name, position, rotation, scale, resource)
-- `delete_object` - Delete object and children
+- `delete_object` - Delete object and children (must be in cache)
+- `delete_object_unknown_type` - Delete object when type is unknown (queries server)
 - `move_object` - Reparent object
 
 ### Bulk Operations
-- `bulk_update` - Execute multiple operations
-- `find_objects` - Search by name, position, or resource URL
+- `bulk_update` - Execute multiple create/update/delete/move operations
+- `find_objects` - Search by name pattern, position radius, or resource URL
 
 ### Resources
-- `upload_resource` - Upload .glb, .png, etc. to server
+- `upload_resource` - Upload .glb, .png, .json, etc. to server
 - `list_resources` - List available resources
 - `delete_resource` - Remove a resource
+
+### Template Resources
+- `get_template_resource_schema` - Get the JSON schema for template resources
+- `validate_template_resource` - Validate a template resource file
+
+Template resources are JSON files that define reusable content:
+- `action://scene` - Reusable scene fragments (clusters of objects)
+- `action://pointlight` - Point lights
+- `action://showtext` - Text displays
+- `action://rotator` - Rotating objects
+- `action://video` - Video screens
 
 ## Usage Example
 
 After connecting Claude Code to the MCP:
 
 ```
-> Connect to my fabric server
+> List my fabric profiles
+> Connect to the default profile
 > List all scenes
 > Open scene 42
 > Create an object called "Cube" at position (0, 1, 0) with resource /objects/Cube.glb
@@ -147,4 +161,5 @@ After connecting Claude Code to the MCP:
 Copyright Patched Reality, Inc. All rights reserved.
 
 ## Attributions
+
 Uses MVMF libraries from Metaversal Corporation.
