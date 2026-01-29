@@ -51,7 +51,7 @@ export const bulkTools = {
     }),
   },
   find_objects: {
-    description: 'Search for objects by name pattern, position radius, or resource URL',
+    description: 'Search for objects by name pattern, position radius, or resource URL. Uses server-side SEARCH action for name queries (begins-with matching on lowercased text). Falls back to loading the full scene tree for non-text queries.',
     inputSchema: z.object({
       sceneId: z.string().describe('ID of the scene to search'),
       query: z.object({
@@ -93,6 +93,7 @@ export async function handleFindObjects(
       name: obj.name,
       position: obj.transform.position,
       resource: obj.resource,
+      childCount: obj.children === null ? '<loading>' : obj.children.length,
     })),
   });
 }

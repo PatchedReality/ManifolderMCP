@@ -4,7 +4,7 @@ import { quaternionSchema, vector3Schema } from './schemas.js';
 
 export const objectTools = {
   list_objects: {
-    description: 'List objects in a scene with optional filtering',
+    description: 'List already-loaded objects in a scene (shallow). Objects whose children have not been loaded yet will show childCount: "<loading>". Use get_object to load a specific object and its children, or find_objects to deep-search.',
     inputSchema: z.object({
       sceneId: z.string().describe('ID of the scene'),
       filter: z.object({
@@ -75,7 +75,7 @@ export async function handleListObjects(
       id: obj.id,
       name: obj.name,
       parentId: obj.parentId,
-      childCount: obj.children.length,
+      childCount: obj.children === null ? '<loading>' : obj.children.length,
       hasResource: !!obj.resource,
     })),
   });

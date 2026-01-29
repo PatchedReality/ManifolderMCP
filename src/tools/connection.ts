@@ -36,14 +36,11 @@ export async function handleFabricConnect(
   client: MVFabricClient,
   args: { profile: string }
 ): Promise<string> {
-  const profileName = args.profile;
-  const profile = await getProfile(profileName);
-
+  const profile = await getProfile(args.profile);
   await client.connect(profile.fabricUrl, profile.adminKey || '');
-
   return JSON.stringify({
     success: true,
-    profile: profileName,
+    profile: args.profile,
     fabricUrl: profile.fabricUrl,
   });
 }

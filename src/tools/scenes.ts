@@ -41,7 +41,7 @@ export async function handleOpenScene(
     root: {
       id: root.id,
       name: root.name,
-      childCount: root.children.length,
+      childCount: root.children === null ? '<loading>' : root.children.length,
     },
   });
 }

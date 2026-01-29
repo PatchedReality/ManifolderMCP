@@ -44,6 +44,11 @@ import {
   handleListResources,
   handleDeleteResource,
   handleMoveResource,
+  handleBulkUploadResources,
+  handleBulkDeleteResources,
+  handleBulkMoveResources,
+  handleDownloadResource,
+  handleBulkDownloadResources,
   templateResourceTools,
   handleGetTemplateResourceSchema,
   handleValidateTemplateResource,
@@ -200,7 +205,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await handleUploadResource(await getStorage(), args as Parameters<typeof handleUploadResource>[1]);
         break;
       case 'list_resources':
-        result = await handleListResources(await getStorage(), args as { filter?: string });
+        result = await handleListResources(await getStorage(), args as { path?: string; filter?: string; recursive?: boolean });
         break;
       case 'delete_resource':
         result = await handleDeleteResource(await getStorage(), args as { resourceName: string });
@@ -208,13 +213,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'move_resource':
         result = await handleMoveResource(await getStorage(), args as { sourceName: string; destName: string });
         break;
+      case 'bulk_upload_resources':
+        result = await handleBulkUploadResources(await getStorage(), args as Parameters<typeof handleBulkUploadResources>[1]);
+        break;
+      case 'bulk_delete_resources':
+        result = await handleBulkDeleteResources(await getStorage(), args as Parameters<typeof handleBulkDeleteResources>[1]);
+        break;
+      case 'bulk_move_resources':
+        result = await handleBulkMoveResources(await getStorage(), args as Parameters<typeof handleBulkMoveResources>[1]);
+        break;
+      case 'download_resource':
+        result = await handleDownloadResource(await getStorage(), args as { resourceName: string; localPath: string });
+        break;
+      case 'bulk_download_resources':
+        result = await handleBulkDownloadResources(await getStorage(), args as Parameters<typeof handleBulkDownloadResources>[1]);
+        break;
 
       // Template resource tools
       case 'get_template_resource_schema':
         result = handleGetTemplateResourceSchema();
         break;
       case 'validate_template_resource':
-        result = await handleValidateTemplateResource(args as { filePath: string; type: ActionResourceType });
+        result = await handleValidateTemplateResource(args as { localPath: string; type: ActionResourceType });
         break;
 
       default:

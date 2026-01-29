@@ -27,7 +27,7 @@ export const templateResourceTools = {
   validate_template_resource: {
     description: 'Validate a template resource JSON file against its schema. Template resources define reusable scene fragments (action://scene), lights (action://pointlight), text (action://showtext), rotators (action://rotator), or video (action://video).',
     inputSchema: z.object({
-      filePath: z.string().describe('Path to the JSON file to validate'),
+      localPath: z.string().describe('Local path to the JSON file to validate'),
       type: z.enum(actionResourceTypes).describe('Resource type to validate against'),
     }),
   },
@@ -107,8 +107,8 @@ export function handleGetTemplateResourceSchema(): string {
   }, null, 2);
 }
 
-export async function handleValidateTemplateResource(args: { filePath: string; type: ActionResourceType }): Promise<string> {
-  const content = await readFile(args.filePath, 'utf-8');
+export async function handleValidateTemplateResource(args: { localPath: string; type: ActionResourceType }): Promise<string> {
+  const content = await readFile(args.localPath, 'utf-8');
   const resource = JSON.parse(content);
   const schema = schemaMap[args.type];
   const result = schema.safeParse(resource);

@@ -15,8 +15,8 @@ Template resources define reusable arrangements of objects (e.g., a cluster of t
 
 1. **Get the schema**: `get_template_resource_schema` → understand the JSON structure
 2. **Create JSON file** locally with the template definition
-3. **Validate**: `validate_template_resource(filePath, type)` → catches errors before upload
-4. **Upload**: `upload_resource(filePath)` → pushes to server
+3. **Validate**: `validate_template_resource(localPath: "...", type: "scene")` → catches errors before upload
+4. **Upload**: `upload_resource(localPath: "...")` → pushes to server
 5. **Instantiate**: `create_object` with `resource: "action://scene"` and `resourceName: "/objects/myTemplate.json"`
 
 ### Template Types
@@ -115,10 +115,35 @@ The pivot container (`label-pivot`) has no `resourceReference`, only a `resource
 
 Resources can be: 3D models (.glb), images (.png, .jpg), or template resource JSON files.
 
+### Single Operations
 - `upload_resource` - Upload a file (creates directories automatically if targetName includes a path)
-- `list_resources` - List available resources (supports filter patterns like `*.glb`)
+- `download_resource` - Download a file (creates local directories automatically)
+- `list_resources` - List available resources
 - `delete_resource` - Remove a resource
 - `move_resource` - Move/rename a resource (creates destination directories automatically)
+
+### Bulk Operations
+- `bulk_upload_resources` - Upload multiple files in one connection
+- `bulk_download_resources` - Download multiple files in one connection
+- `bulk_delete_resources` - Delete multiple resources in one connection
+- `bulk_move_resources` - Move/rename multiple resources in one connection
+
+### list_resources Options
+
+**path**: Subdirectory to list (e.g., `Forest/Trees`). Defaults to root.
+
+**recursive**: Set to `true` to scan all subdirectories.
+
+**filter**: Glob pattern with `*` as wildcard (case-insensitive):
+- `*.glb` - files ending in .glb
+- `*.json` - files ending in .json
+- `tree*` - files starting with "tree"
+- `*forest*` - files containing "forest"
+
+**Examples:**
+- `list_resources()` - list root directory
+- `list_resources(path: "Forest/Trees")` - list specific subdirectory
+- `list_resources(recursive: true, filter: "*.glb")` - find all .glb files recursively
 
 ## Resource URLs
 

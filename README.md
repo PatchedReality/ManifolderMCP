@@ -129,8 +129,14 @@ claude mcp add fabric node ~/fabric-mcp/dist/index.js
 
 ### Resources
 - `upload_resource` - Upload .glb, .png, .json, etc. to server
+- `download_resource` - Download a resource file from the server
 - `list_resources` - List available resources
 - `delete_resource` - Remove a resource
+- `move_resource` - Rename or move a resource on the server
+- `bulk_upload_resources` - Upload multiple files in one operation
+- `bulk_download_resources` - Download multiple files in one operation
+- `bulk_delete_resources` - Delete multiple resources in one operation
+- `bulk_move_resources` - Move/rename multiple resources in one operation
 
 ### Template Resources
 - `get_template_resource_schema` - Get the JSON schema for template resources

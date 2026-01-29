@@ -39,7 +39,7 @@ export interface RMPObject {
   resourceName: string | null;
   bound: BoundingBox | null;
   classId: number;
-  children: string[];
+  children: string[] | null;
 }
 
 export interface Scene {

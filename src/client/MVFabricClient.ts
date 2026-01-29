@@ -1,5 +1,11 @@
 // @ts-nocheck - MVMF libraries are untyped JavaScript
 import '../vendor/mv/index.js';
+import { appendFileSync } from 'fs';
+
+const DEBUG_LOG = '/tmp/fabric-mcp-debug.log';
+function debugLog(msg: string) {
+  appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${msg}\n`);
+}
 
 import type {
   BulkOperation,
@@ -28,12 +34,20 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   private loginAttempted = false;
 
   private objectCache: Map<string, any> = new Map();
-  private pendingReady: Map<any, { resolve: () => void; reject: (err: Error) => void }> = new Map();
+  private sceneClassIds: Map<string, number> = new Map();
+  private pendingReady: Map<string, { resolve: () => void; reject: (err: Error) => void }> = new Map();
   private connectResolve: (() => void) | null = null;
   private connectReject: ((err: Error) => void) | null = null;
 
-  constructor() {
-    super();
+  private getObjectName(pObject: any): string {
+    return pObject.pName?.wsRMPObjectId
+      || pObject.pName?.wsRMTObjectId
+      || pObject.pName?.wsRMCObjectId
+      || `Object ${pObject.twObjectIx}`;
+  }
+
+  private getObjectKey(pObject: any): string {
+    return `${pObject.wClass_Object || pObject.sID || 'unknown'}:${pObject.twObjectIx || 0}`;
   }
 
   private waitForReady(pObject: any, timeoutMs: number = 30000): Promise<void> {
@@ -43,13 +57,16 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     if (pObject.ReadyState?.() === pObject.eSTATE?.ERROR) {
       return Promise.reject(new Error('Object in error state'));
     }
+    const key = this.getObjectKey(pObject);
+    debugLog(`[waitForReady] registering key=${key} sID=${pObject.sID} wClass=${pObject.wClass_Object} twObj=${pObject.twObjectIx}`);
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        this.pendingReady.delete(pObject);
-        reject(new Error(`Timeout waiting for object to be ready (state: ${pObject.ReadyState?.()})`));
+        this.pendingReady.delete(key);
+        debugLog(`[waitForReady] TIMEOUT key=${key}`);
+        reject(new Error(`Timeout waiting for object to be ready (key: ${key}, state: ${pObject.ReadyState?.()})`));
       }, timeoutMs);
 
-      this.pendingReady.set(pObject, {
+      this.pendingReady.set(key, {
         resolve: () => { clearTimeout(timeoutId); resolve(); },
         reject: (err: Error) => { clearTimeout(timeoutId); reject(err); }
       });
@@ -59,43 +76,51 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   onReadyState(pNotice: any) {
     this.handleReadyState(pNotice);
 
-    const pending = this.pendingReady.get(pNotice.pCreator);
+    const pObject = pNotice.pCreator;
+    if (!pObject) return;
+
+    const key = this.getObjectKey(pObject);
+    const isReady = pObject.IsReady?.();
+    const state = pObject.ReadyState?.();
+    debugLog(`[onReadyState] key=${key} isReady=${isReady} state=${state} sID=${pObject.sID} wClass=${pObject.wClass_Object} twObj=${pObject.twObjectIx} pendingKeys=[${[...this.pendingReady.keys()].join(',')}]`);
+
+    const pending = this.pendingReady.get(key);
     if (pending) {
-      if (pNotice.pCreator?.IsReady()) {
-        this.pendingReady.delete(pNotice.pCreator);
+      if (isReady) {
+        this.pendingReady.delete(key);
         pending.resolve();
-      } else if (pNotice.pCreator?.ReadyState?.() === pNotice.pCreator?.eSTATE?.ERROR) {
-        this.pendingReady.delete(pNotice.pCreator);
+      } else if (state === pObject.eSTATE?.ERROR) {
+        this.pendingReady.delete(key);
         pending.reject(new Error('Object failed to load'));
       }
     }
   }
 
   onInserted(pNotice: any) {
-    const pChild = pNotice.pCreator;
+    const pChild = pNotice.pData?.pChild;
+    const pParent = pNotice.pCreator;
+    debugLog(`[onInserted] parent=${pParent?.twObjectIx} parentClass=${pParent?.wClass_Object} child=${pChild?.twObjectIx} childClass=${pChild?.wClass_Object} childName=${pChild?.pName?.wsRMPObjectId || pChild?.pName?.wsRMTObjectId || pChild?.pName?.wsRMCObjectId}`);
     if (pChild?.twObjectIx) {
       this.objectCache.set(pChild.twObjectIx.toString(), pChild);
     }
   }
 
   onUpdated(pNotice: any) {
-    const pObject = pNotice.pCreator;
-    if (pObject?.twObjectIx) {
-      this.objectCache.set(pObject.twObjectIx.toString(), pObject);
+    const pChild = pNotice.pData?.pChild;
+    if (pChild?.twObjectIx) {
+      this.objectCache.set(pChild.twObjectIx.toString(), pChild);
     }
   }
 
   onChanged(pNotice: any) {
-    const pObject = pNotice.pCreator;
-    if (pObject?.twObjectIx) {
-      this.objectCache.set(pObject.twObjectIx.toString(), pObject);
-    }
+    this.onUpdated(pNotice);
   }
 
   onDeleting(pNotice: any) {
-    const pObject = pNotice.pCreator;
-    if (pObject?.twObjectIx) {
-      this.objectCache.delete(pObject.twObjectIx.toString());
+    const pChild = pNotice.pData?.pChild;
+    if (pChild?.twObjectIx) {
+      const id = pChild.twObjectIx.toString();
+      this.objectCache.delete(id);
     }
   }
 
@@ -176,17 +201,13 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     this.pRMRoot.Attach(this);
   }
 
-  private waitForRootReady(): Promise<void> {
-    return this.waitForReady(this.pRMRoot);
-  }
-
-  private async openAndWait(modelType: string, objectId: number): Promise<any> {
+  private async openAndWait(modelType: string, objectId: number, timeoutMs?: number): Promise<any> {
     const pObject = this.pLnG.Model_Open(modelType, objectId);
     if (!pObject) {
       throw new Error(`Failed to open ${modelType} with id ${objectId}`);
     }
     pObject.Attach(this);
-    await this.waitForReady(pObject);
+    await this.waitForReady(pObject, timeoutMs);
     return pObject;
   }
 
@@ -209,12 +230,12 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   private async openAnyObjectType(objectId: number): Promise<any> {
     for (const modelType of MVFabricClient.OBJECT_TYPES) {
       try {
-        return await this.openAndWait(modelType, objectId);
+        return await this.openAndWait(modelType, objectId, 10000);
       } catch {
         // Try next type
       }
     }
-    throw new Error(`Could not open object ${objectId}`);
+    throw new Error(`Could not open object ${objectId} as any known type`);
   }
 
   private enumAllChildTypes(pObject: any, callback: (child: any) => void): void {
@@ -228,19 +249,18 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       this.pLnG.Model_Close(this.pRMRoot);
       this.pRMRoot = null;
     }
-    if (this.pLnG) {
-      this.pLnG = null;
-    }
     if (this.pFabric) {
       await this.pFabric.destructor();
       this.pFabric = null;
     }
+    this.pLnG = null;
     this.connected = false;
     this.loggedIn = false;
     this.fabricUrl = null;
     this.profile = null;
     this.currentSceneId = null;
     this.objectCache.clear();
+    this.sceneClassIds.clear();
   }
 
   getStatus(): ConnectionStatus {
@@ -256,7 +276,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
 
   async listScenes(): Promise<Scene[]> {
     this.ensureConnected();
-    await this.waitForRootReady();
+    await this.waitForReady(this.pRMRoot);
 
     const scenes: Scene[] = [];
     const seenIds = new Set<string>();
@@ -265,10 +285,9 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       if (seenIds.has(id)) return;
       seenIds.add(id);
 
-      const name = pRMXObject.pName?.wsRMPObjectId
-        || pRMXObject.pName?.wsRMTObjectId
-        || pRMXObject.pName?.wsRMCObjectId
-        || `Object ${pRMXObject.twObjectIx}`;
+      const name = this.getObjectName(pRMXObject);
+      const classId = pRMXObject.wClass_Object;
+      this.sceneClassIds.set(id, classId);
       scenes.push({ id, name, rootObjectId: id });
     };
 
@@ -279,7 +298,15 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   async openScene(sceneId: string): Promise<RMPObject> {
     this.ensureConnected();
 
-    const pObject = await this.openAnyObjectType(parseInt(sceneId));
+    const classId = this.sceneClassIds.get(sceneId);
+    let pObject: any;
+    if (classId && MVFabricClient.CLASS_ID_TO_TYPE[classId]) {
+      debugLog(`[openScene] opening scene ${sceneId} with known class ${classId} (${MVFabricClient.CLASS_ID_TO_TYPE[classId]})`);
+      pObject = await this.openAndWait(MVFabricClient.CLASS_ID_TO_TYPE[classId], parseInt(sceneId));
+    } else {
+      debugLog(`[openScene] opening scene ${sceneId} with unknown class, trying all types`);
+      pObject = await this.openAnyObjectType(parseInt(sceneId));
+    }
 
     this.currentSceneId = sceneId;
     this.objectCache.set(sceneId, pObject);
@@ -289,7 +316,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
 
   async createScene(name: string): Promise<Scene> {
     this.ensureConnected();
-    await this.waitForRootReady();
+    await this.waitForReady(this.pRMRoot);
 
     const response = await this.sendAction(this.pRMRoot, 'RMPOBJECT_OPEN', (payload: any) => {
       payload.pName.wsRMPObjectId = name;
@@ -326,7 +353,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
 
   async deleteScene(sceneId: string): Promise<void> {
     this.ensureConnected();
-    await this.waitForRootReady();
+    await this.waitForReady(this.pRMRoot);
 
     const response = await this.sendAction(this.pRMRoot, 'RMPOBJECT_CLOSE', (payload: any) => {
       payload.twRMPObjectIx_Close = parseInt(sceneId);
@@ -343,27 +370,40 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     this.objectCache.delete(sceneId);
   }
 
+  private async openObject(objectId: number, classId?: number): Promise<void> {
+    if (classId && MVFabricClient.CLASS_ID_TO_TYPE[classId]) {
+      await this.openWithKnownType(objectId, classId);
+    } else {
+      await this.openAnyObjectType(objectId);
+    }
+  }
+
   async listObjects(sceneId: string, filter?: ObjectFilter): Promise<RMPObject[]> {
     this.ensureConnected();
 
-    let pScene = this.objectCache.get(sceneId);
-    if (!pScene) {
-      pScene = await this.openAnyObjectType(parseInt(sceneId));
-      this.objectCache.set(sceneId, pScene);
+    if (!this.objectCache.has(sceneId)) {
+      await this.openAnyObjectType(parseInt(sceneId));
     }
 
     const objects: RMPObject[] = [];
     const seenIds = new Set<string>();
-    const collectObjects = (pObject: any) => {
+
+    const collectLoaded = (pObject: any): void => {
       const id = pObject.twObjectIx.toString();
       if (seenIds.has(id)) return;
       seenIds.add(id);
 
       objects.push(this.rmxToRMPObject(pObject));
-      this.enumAllChildTypes(pObject, collectObjects);
+
+      this.enumAllChildTypes(pObject, (child: any) => {
+        collectLoaded(child);
+      });
     };
 
-    collectObjects(pScene);
+    const pScene = this.objectCache.get(sceneId);
+    if (pScene) {
+      collectLoaded(pScene);
+    }
 
     if (filter?.namePattern) {
       const pattern = new RegExp(filter.namePattern, 'i');
@@ -377,7 +417,18 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     this.ensureConnected();
 
     let pObject = this.objectCache.get(objectId);
-    if (!pObject) {
+    if (pObject) {
+      // Object is cached but may not have its children loaded yet.
+      // If it has children (nChildren > 0) but IsReady is false, open it to fetch children.
+      if (!pObject.IsReady?.()) {
+        const classId = pObject.wClass_Object;
+        if (classId && MVFabricClient.CLASS_ID_TO_TYPE[classId]) {
+          debugLog(`[getObject] cached object ${objectId} not ready (class ${classId}), opening to load children`);
+          pObject = await this.openAndWait(MVFabricClient.CLASS_ID_TO_TYPE[classId], parseInt(objectId));
+          this.objectCache.set(objectId, pObject);
+        }
+      }
+    } else {
       pObject = await this.openAnyObjectType(parseInt(objectId));
       this.objectCache.set(objectId, pObject);
     }
@@ -404,19 +455,19 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       payload.pResource.qwResource = 0;
       payload.pResource.sName = params.resourceName || '';
       payload.pResource.sReference = params.resource || '';
-      payload.pTransform.vPosition.dX = params.position?.x || 0;
-      payload.pTransform.vPosition.dY = params.position?.y || 0;
-      payload.pTransform.vPosition.dZ = params.position?.z || 0;
-      payload.pTransform.qRotation.dX = params.rotation?.x || 0;
-      payload.pTransform.qRotation.dY = params.rotation?.y || 0;
-      payload.pTransform.qRotation.dZ = params.rotation?.z || 0;
-      payload.pTransform.qRotation.dW = params.rotation?.w || 1;
-      payload.pTransform.vScale.dX = params.scale?.x || 1;
-      payload.pTransform.vScale.dY = params.scale?.y || 1;
-      payload.pTransform.vScale.dZ = params.scale?.z || 1;
-      payload.pBound.dX = params.bound?.x || 1;
-      payload.pBound.dY = params.bound?.y || 1;
-      payload.pBound.dZ = params.bound?.z || 1;
+      payload.pTransform.vPosition.dX = params.position?.x ?? 0;
+      payload.pTransform.vPosition.dY = params.position?.y ?? 0;
+      payload.pTransform.vPosition.dZ = params.position?.z ?? 0;
+      payload.pTransform.qRotation.dX = params.rotation?.x ?? 0;
+      payload.pTransform.qRotation.dY = params.rotation?.y ?? 0;
+      payload.pTransform.qRotation.dZ = params.rotation?.z ?? 0;
+      payload.pTransform.qRotation.dW = params.rotation?.w ?? 1;
+      payload.pTransform.vScale.dX = params.scale?.x ?? 1;
+      payload.pTransform.vScale.dY = params.scale?.y ?? 1;
+      payload.pTransform.vScale.dZ = params.scale?.z ?? 1;
+      payload.pBound.dX = params.bound?.x ?? 1;
+      payload.pBound.dY = params.bound?.y ?? 1;
+      payload.pBound.dZ = params.bound?.z ?? 1;
     });
 
     if (response.nResult !== 0) {
@@ -430,12 +481,12 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       parentId: params.parentId,
       name: params.name,
       transform: {
-        position: params.position || { x: 0, y: 0, z: 0 },
-        rotation: params.rotation || { x: 0, y: 0, z: 0, w: 1 },
-        scale: params.scale || { x: 1, y: 1, z: 1 },
+        position: params.position ?? { x: 0, y: 0, z: 0 },
+        rotation: params.rotation ?? { x: 0, y: 0, z: 0, w: 1 },
+        scale: params.scale ?? { x: 1, y: 1, z: 1 },
       },
-      resource: params.resource || null,
-      resourceName: params.resourceName || null,
+      resource: params.resource ?? null,
+      resourceName: params.resourceName ?? null,
       bound: null,
       classId: ClassIds.RMPObject,
       children: [],
@@ -602,14 +653,55 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     return { success, failed, errors };
   }
 
-  async findObjects(sceneId: string, query: SearchQuery): Promise<RMPObject[]> {
-    const allObjects = await this.listObjects(sceneId);
+  private async loadFullTree(sceneId: string): Promise<RMPObject[]> {
+    if (!this.objectCache.has(sceneId)) {
+      await this.openAnyObjectType(parseInt(sceneId));
+    }
 
+    const objects: RMPObject[] = [];
+    const seenIds = new Set<string>();
+
+    const collectObjects = async (pObject: any): Promise<void> => {
+      const id = pObject.twObjectIx.toString();
+      if (seenIds.has(id)) return;
+      seenIds.add(id);
+
+      objects.push(this.rmxToRMPObject(pObject));
+
+      const children: any[] = [];
+      this.enumAllChildTypes(pObject, (child: any) => {
+        children.push(child);
+      });
+
+      const unopened = children.filter(c =>
+        !seenIds.has(c.twObjectIx.toString()) && !this.objectCache.has(c.twObjectIx.toString())
+      );
+      await Promise.all(unopened.map(child =>
+        this.openObject(child.twObjectIx, child.wClass_Object).catch(() => {})
+      ));
+
+      await Promise.all(children.map(child => collectObjects(child)));
+    };
+
+    const pScene = this.objectCache.get(sceneId);
+    if (pScene) {
+      await collectObjects(pScene);
+    }
+
+    return objects;
+  }
+
+  async findObjects(sceneId: string, query: SearchQuery): Promise<RMPObject[]> {
+    this.ensureConnected();
+
+    // Use server-side SEARCH when we have a text query
+    if (query.namePattern) {
+      return this.serverSearch(sceneId, query);
+    }
+
+    // Fall back to client-side filtering for non-text queries
+    const allObjects = await this.loadFullTree(sceneId);
     return allObjects.filter(obj => {
-      if (query.namePattern) {
-        const pattern = new RegExp(query.namePattern, 'i');
-        if (!pattern.test(obj.name)) return false;
-      }
       if (query.resourceUrl && obj.resource !== query.resourceUrl) return false;
       if (query.positionRadius) {
         const { center, radius } = query.positionRadius;
@@ -623,6 +715,60 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       }
       return true;
     });
+  }
+
+  private async serverSearch(sceneId: string, query: SearchQuery): Promise<RMPObject[]> {
+    let pScene = this.objectCache.get(sceneId);
+    if (!pScene) {
+      pScene = await this.openAndWait('RMPObject', parseInt(sceneId));
+      this.objectCache.set(sceneId, pScene);
+    }
+
+    const pIAction = pScene.Request('SEARCH');
+    if (!pIAction) {
+      // SEARCH not available on this object type, fall back to full tree
+      const allObjects = await this.loadFullTree(sceneId);
+      const pattern = new RegExp(query.namePattern!, 'i');
+      return allObjects.filter(obj => pattern.test(obj.name));
+    }
+
+    const payload = pIAction.pRequest;
+
+    // Set the parent context based on object type
+    if (pScene.sID === 'RMCObject') {
+      payload.twRMCObjectIx = pScene.twObjectIx;
+    } else {
+      payload.twRMTObjectIx = pScene.twObjectIx;
+    }
+
+    payload.dX = query.positionRadius?.center.x ?? 0;
+    payload.dY = query.positionRadius?.center.y ?? 0;
+    payload.dZ = query.positionRadius?.center.z ?? 0;
+    payload.sText = query.namePattern!.toLowerCase();
+
+    const response = await this.sendAction(pScene, 'SEARCH', (p: any) => {
+      Object.assign(p, payload);
+    });
+
+    if (response.nResult !== 0) {
+      throw new Error(`Search failed: error ${response.nResult}`);
+    }
+
+    const results: RMPObject[] = [];
+    const resultSet = response.aResultSet?.[0] || [];
+    for (const item of resultSet) {
+      const objectId = item.twRMPObjectIx?.toString() || item.twRMTObjectIx?.toString() || item.twRMCObjectIx?.toString();
+      if (objectId) {
+        try {
+          const obj = await this.getObject(objectId);
+          results.push(obj);
+        } catch {
+          // Skip objects we can't open
+        }
+      }
+    }
+
+    return results;
   }
 
   private ensureConnected(): void {
@@ -647,44 +793,55 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     });
   }
 
+  private getChildIds(pObject: any): string[] {
+    const childIds: string[] = [];
+    this.enumAllChildTypes(pObject, (child: any) => {
+      if (child?.twObjectIx) {
+        childIds.push(child.twObjectIx.toString());
+      }
+    });
+    return childIds;
+  }
+
   private rmxToRMPObject(rmx: any): RMPObject {
-    // Get name based on object class: 71=RMCObject, 72=RMTObject, 73=RMPObject
-    const name = rmx.pName?.wsRMPObjectId
-      || rmx.pName?.wsRMTObjectId
-      || rmx.pName?.wsRMCObjectId
-      || `Object ${rmx.twObjectIx}`;
+    const id = rmx.twObjectIx.toString();
+    const name = this.getObjectName(rmx);
+    const nChildren = rmx.nChildren ?? 0;
+    const childIds = this.getChildIds(rmx);
+    // If nChildren > 0 but no children enumerated, they haven't been loaded yet
+    const children = (nChildren > 0 && childIds.length === 0) ? null : childIds;
     return {
-      id: rmx.twObjectIx.toString(),
+      id,
       parentId: rmx.twParentIx ? rmx.twParentIx.toString() : null,
       name,
       transform: {
         position: {
-          x: rmx.pTransform?.vPosition?.dX || 0,
-          y: rmx.pTransform?.vPosition?.dY || 0,
-          z: rmx.pTransform?.vPosition?.dZ || 0,
+          x: rmx.pTransform?.vPosition?.dX ?? 0,
+          y: rmx.pTransform?.vPosition?.dY ?? 0,
+          z: rmx.pTransform?.vPosition?.dZ ?? 0,
         },
         rotation: {
-          x: rmx.pTransform?.qRotation?.dX || 0,
-          y: rmx.pTransform?.qRotation?.dY || 0,
-          z: rmx.pTransform?.qRotation?.dZ || 0,
-          w: rmx.pTransform?.qRotation?.dW || 1,
+          x: rmx.pTransform?.qRotation?.dX ?? 0,
+          y: rmx.pTransform?.qRotation?.dY ?? 0,
+          z: rmx.pTransform?.qRotation?.dZ ?? 0,
+          w: rmx.pTransform?.qRotation?.dW ?? 1,
         },
         scale: {
-          x: rmx.pTransform?.vScale?.dX || 1,
-          y: rmx.pTransform?.vScale?.dY || 1,
-          z: rmx.pTransform?.vScale?.dZ || 1,
+          x: rmx.pTransform?.vScale?.dX ?? 1,
+          y: rmx.pTransform?.vScale?.dY ?? 1,
+          z: rmx.pTransform?.vScale?.dZ ?? 1,
         },
       },
       resource: rmx.pResource?.sReference
         ? (rmx.pResource.sName ? `${rmx.pResource.sReference}:${rmx.pResource.sName}` : rmx.pResource.sReference)
         : null,
-      resourceName: rmx.pResource?.sName || null,
+      resourceName: rmx.pResource?.sName ?? null,
       bound: rmx.pBound ? {
         min: { x: -rmx.pBound.dX / 2, y: -rmx.pBound.dY / 2, z: -rmx.pBound.dZ / 2 },
         max: { x: rmx.pBound.dX / 2, y: rmx.pBound.dY / 2, z: rmx.pBound.dZ / 2 },
       } : null,
       classId: rmx.wClass_Object,
-      children: [],
+      children,
     };
   }
 
