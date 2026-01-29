@@ -250,6 +250,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       fabricUrl: this.fabricUrl,
       currentSceneId: this.currentSceneId,
       currentSceneName: null,
+      resourceRootUrl: this.getResourceRootUrl() || null,
     };
   }
 
@@ -434,6 +435,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
         scale: params.scale || { x: 1, y: 1, z: 1 },
       },
       resource: params.resource || null,
+      resourceName: null,
       bound: null,
       classId: ClassIds.RMPObject,
       children: [],
@@ -676,6 +678,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       resource: rmx.pResource?.sReference
         ? (rmx.pResource.sName ? `${rmx.pResource.sReference}:${rmx.pResource.sName}` : rmx.pResource.sReference)
         : null,
+      resourceName: rmx.pResource?.sName || null,
       bound: rmx.pBound ? {
         min: { x: -rmx.pBound.dX / 2, y: -rmx.pBound.dY / 2, z: -rmx.pBound.dZ / 2 },
         max: { x: rmx.pBound.dX / 2, y: rmx.pBound.dY / 2, z: rmx.pBound.dZ / 2 },
@@ -683,5 +686,22 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       classId: rmx.wClass_Object,
       children: [],
     };
+  }
+
+  getResourceRootUrl(): string {
+    return this.pFabric?.pMSFConfig?.map?.sRootUrl || '';
+  }
+
+  resolveResourceName(resourceName: string | null): string | null {
+    if (!resourceName) return null;
+
+    if (resourceName.startsWith('http://') || resourceName.startsWith('https://')) {
+      return resourceName;
+    }
+
+    const rootUrl = this.getResourceRootUrl();
+    if (!rootUrl) return null;
+
+    return new URL(resourceName, rootUrl).href;
   }
 }

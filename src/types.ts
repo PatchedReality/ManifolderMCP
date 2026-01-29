@@ -36,6 +36,7 @@ export interface RMPObject {
   name: string;
   transform: Transform;
   resource: string | null;
+  resourceName: string | null;
   bound: BoundingBox | null;
   classId: number;
   children: string[];
@@ -87,4 +88,5 @@ export interface ConnectionStatus {
   fabricUrl: string | null;
   currentSceneId: string | null;
   currentSceneName: string | null;
+  resourceRootUrl: string | null;
 }

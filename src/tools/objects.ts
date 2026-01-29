@@ -84,7 +84,8 @@ export async function handleGetObject(
   args: { objectId: string }
 ): Promise<string> {
   const obj = await client.getObject(args.objectId);
-  return JSON.stringify(obj);
+  const resolvedResourceUrl = client.resolveResourceName(obj.resourceName);
+  return JSON.stringify({ ...obj, resolvedResourceUrl });
 }
 
 export async function handleCreateObject(
