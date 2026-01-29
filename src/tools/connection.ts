@@ -8,10 +8,14 @@ export const connectionTools = {
     inputSchema: z.object({}),
   },
   fabric_connect: {
-    description: 'Connect to a Fabric server. REQUIRED: specify which profile to use (e.g., "earth", "default"). Call list_profiles first if unsure.',
+    description: 'Connect to a Fabric server. REQUIRED: specify which profile to use (e.g., "earth", "default"). Call list_profiles first if unsure. Alternatively, provide a direct url for anonymous connection.',
     inputSchema: z.object({
-      profile: z.string().describe('Config profile name (REQUIRED - e.g., "earth", "default")'),
-    }),
+      profile: z.string().optional().describe('Config profile name (e.g., "earth", "default")'),
+      url: z.string().optional().describe('Direct fabric URL for anonymous connection'),
+    }).refine(
+      data => (data.profile != null) !== (data.url != null),
+      { message: 'Provide either profile or url, not both' }
+    ),
   },
   fabric_disconnect: {
     description: 'Disconnect from the Fabric server',
@@ -34,9 +38,23 @@ export async function handleListProfiles(): Promise<string> {
 
 export async function handleFabricConnect(
   client: MVFabricClient,
-  args: { profile: string }
+  args: { profile?: string; url?: string }
 ): Promise<string> {
-  const profile = await getProfile(args.profile);
+  const status = client.getStatus();
+  if (status.connected) {
+    await client.disconnect();
+  }
+
+  if (args.url) {
+    await client.connect(args.url, '');
+    return JSON.stringify({
+      success: true,
+      profile: 'anonymous',
+      fabricUrl: args.url,
+    });
+  }
+
+  const profile = await getProfile(args.profile!);
   await client.connect(profile.fabricUrl, profile.adminKey || '');
   return JSON.stringify({
     success: true,

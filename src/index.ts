@@ -146,7 +146,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await handleListProfiles();
         break;
       case 'fabric_connect':
-        result = await handleFabricConnect(client, args as { profile: string });
+        result = await handleFabricConnect(client, args as { profile?: string; url?: string });
         break;
       case 'fabric_disconnect':
         result = await handleFabricDisconnect(client);

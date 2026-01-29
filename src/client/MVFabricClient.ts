@@ -27,7 +27,6 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   private pRMRoot: any = null;
   private connected = false;
   private loggedIn = false;
-  private profile: string | null = null;
   private fabricUrl: string | null = null;
   private currentSceneId: string | null = null;
   private adminKey: string | null = null;
@@ -38,6 +37,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   private pendingReady: Map<string, { resolve: () => void; reject: (err: Error) => void }> = new Map();
   private connectResolve: (() => void) | null = null;
   private connectReject: ((err: Error) => void) | null = null;
+  private connectionGeneration = 0;
 
   private getObjectName(pObject: any): string {
     return pObject.pName?.wsRMPObjectId
@@ -125,9 +125,14 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async connect(fabricUrl: string, adminKey: string): Promise<void> {
+    if (this.connected || this.pFabric) {
+      await this.disconnect();
+    }
+
     this.fabricUrl = fabricUrl;
     this.adminKey = adminKey;
     this.loginAttempted = false;
+    ++this.connectionGeneration;
 
     return new Promise((resolve, reject) => {
       this.connectResolve = resolve;
@@ -139,16 +144,25 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   private handleReadyState(pNotice: any) {
+    // Ignore callbacks from a previous connection
+    if (pNotice.pCreator !== this.pFabric && pNotice.pCreator !== this.pLnG) {
+      return;
+    }
+
     if (pNotice.pCreator === this.pFabric) {
       if (this.pFabric.IsReady()) {
         this.pLnG = this.pFabric.GetLnG('map');
         if (!this.pLnG) {
           this.connectReject?.(new Error('Failed to get LnG "map" from fabric config'));
+          this.connectResolve = null;
+          this.connectReject = null;
           return;
         }
         this.pLnG.Attach(this);
       } else if (this.pFabric.ReadyState() === this.pFabric.eSTATE.ERROR) {
         this.connectReject?.(new Error('Failed to load fabric config from ' + this.fabricUrl));
+        this.connectResolve = null;
+        this.connectReject = null;
       }
     } else if (pNotice.pCreator === this.pLnG) {
       const state = this.pLnG.ReadyState();
@@ -156,7 +170,6 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
         const wasConnected = this.connected;
         this.connected = true;
         this.loggedIn = true;
-        this.profile = 'default';
         if (!wasConnected) {
           this.start();
           this.connectResolve?.();
@@ -166,21 +179,17 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       } else if (state === this.pLnG.eSTATE.LOGGEDOUT) {
         if (this.adminKey) {
           if (this.loginAttempted) {
-            // Login failed - we tried and came back to LOGGEDOUT
             this.connectReject?.(new Error('Login failed: invalid admin key or authentication error'));
             this.connectResolve = null;
             this.connectReject = null;
           } else {
-            // First attempt - try to login
             this.loginAttempted = true;
             this.pLnG.Login('token=' + MV.MVMF.Escape(this.adminKey));
           }
         } else {
-          // Anonymous read-only access
           this.connected = true;
           this.loggedIn = false;
-          this.profile = 'default';
-          this.start();
+            this.start();
           this.connectResolve?.();
           this.connectResolve = null;
           this.connectReject = null;
@@ -191,6 +200,8 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
           this.loggedIn = false;
         } else {
           this.connectReject?.(new Error('Disconnected from server'));
+          this.connectResolve = null;
+          this.connectReject = null;
         }
       }
     }
@@ -245,19 +256,43 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async disconnect(): Promise<void> {
+    // Bump generation so any in-flight callbacks from this connection are ignored
+    this.connectionGeneration++;
+
+    // Reject any pending connect promise
+    if (this.connectReject) {
+      this.connectReject(new Error('Disconnected'));
+    }
+    this.connectResolve = null;
+    this.connectReject = null;
+
+    // Reject all pending object-ready promises
+    for (const [key, pending] of this.pendingReady) {
+      pending.reject(new Error('Disconnected'));
+    }
+    this.pendingReady.clear();
+
     if (this.pRMRoot) {
-      this.pLnG.Model_Close(this.pRMRoot);
+      try {
+        this.pLnG.Model_Close(this.pRMRoot);
+      } catch {
+        // Ignore errors during teardown
+      }
       this.pRMRoot = null;
     }
     if (this.pFabric) {
-      await this.pFabric.destructor();
+      try {
+        await this.pFabric.destructor();
+      } catch {
+        // Ignore errors during teardown
+      }
       this.pFabric = null;
     }
     this.pLnG = null;
     this.connected = false;
     this.loggedIn = false;
     this.fabricUrl = null;
-    this.profile = null;
+    this.adminKey = null;
     this.currentSceneId = null;
     this.objectCache.clear();
     this.sceneClassIds.clear();
@@ -266,7 +301,6 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   getStatus(): ConnectionStatus {
     return {
       connected: this.connected,
-      profile: this.profile,
       fabricUrl: this.fabricUrl,
       currentSceneId: this.currentSceneId,
       currentSceneName: null,

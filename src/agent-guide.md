@@ -2,7 +2,9 @@
 
 ## Core Workflow
 
-1. `fabric_connect` (with profile name) → establishes connection
+1. `fabric_connect` → establishes connection
+   - **By profile**: `fabric_connect(profile: "earth")` — uses a pre-configured profile with credentials
+   - **By URL**: `fabric_connect(url: "https://example.com/fabric/72/1")` — anonymous read-only connection to any fabric server
 2. `list_scenes` → find available scenes
 3. `open_scene` → load a scene to work with
 4. Manipulate objects: `create_object`, `update_object`, `delete_object`, `move_object`

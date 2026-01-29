@@ -86,7 +86,6 @@ export interface BulkOperation {
 
 export interface ConnectionStatus {
   connected: boolean;
-  profile: string | null;
   fabricUrl: string | null;
   currentSceneId: string | null;
   currentSceneName: string | null;
