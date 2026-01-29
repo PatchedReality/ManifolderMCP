@@ -1,0 +1,30 @@
+{
+  "name": "fabric-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for editing Fabric spatial scenes",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "fabric-mcp": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc && cp -r src/vendor dist/",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "socket.io-client": "^4.7.0",
+    "ssh2-sftp-client": "^11.0.0",
+    "zod": "^3.23.0",
+    "zod-to-json-schema": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ssh2-sftp-client": "^9.0.0",
+    "typescript": "^5.6.0"
+  }
+}

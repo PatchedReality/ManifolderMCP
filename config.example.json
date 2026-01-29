@@ -1,0 +1,11 @@
+{
+  "default": {
+    "fabricUrl": "https://example.com/fabric/fabric.msf",
+    "adminKey": "your-admin-token",
+    "scpHost": "spatial.example.com",
+    "scpUser": "deploy",
+    "scpRemotePath": "/var/www/objects/",
+    "scpKeyPath": "~/.ssh/id_rsa",
+    "resourceUrlPrefix": "/objects/"
+  }
+}

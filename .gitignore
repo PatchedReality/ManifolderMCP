@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code local config
+.claude/
+.mcp.json
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Config (keep example, ignore actual)
+config.json
+
+# Test coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
