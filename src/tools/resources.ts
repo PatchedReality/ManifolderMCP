@@ -3,14 +3,14 @@ import type { ScpStorage } from '../storage/ScpStorage.js';
 
 export const resourceTools = {
   upload_resource: {
-    description: 'Upload a resource file to the Fabric server. Resources can be: 3D models (.glb), images (.png, .jpg), or template resource JSON files (for reusable scene fragments, lights, text, etc.).',
+    description: 'Upload a resource file to the Fabric server. Resources can be: 3D models (.glb), images (.png, .jpg), or action resource JSON files (for lights, text, rotators, video).',
     inputSchema: z.object({
       localPath: z.string().describe('Local path to the file to upload'),
       targetName: z.string().optional().describe('Target filename (defaults to source filename)'),
     }),
   },
   list_resources: {
-    description: 'List available resources on the server. Resources include 3D models (.glb), images (.png, .jpg), and template resource JSON files.',
+    description: 'List available resources on the server. Resources include 3D models (.glb), images (.png, .jpg), and action resource JSON files.',
     inputSchema: z.object({
       path: z.string().optional().describe('Subdirectory path to list (e.g., "Forest/Trees"). Defaults to root.'),
       filter: z.string().optional().describe('Glob pattern using * as wildcard. Examples: "*.glb" (files ending in .glb), "tree*" (files starting with tree), "*forest*" (files containing forest). Case-insensitive.'),
@@ -18,13 +18,13 @@ export const resourceTools = {
     }),
   },
   delete_resource: {
-    description: 'Remove a resource file from the server. Can delete any resource type: 3D models, images, or template resource JSON files.',
+    description: 'Remove a resource file from the server. Can delete any resource type: 3D models, images, or action resource JSON files.',
     inputSchema: z.object({
       resourceName: z.string().describe('Name of the resource to delete'),
     }),
   },
   move_resource: {
-    description: 'Move or rename a resource on the server. Creates destination directories as needed. Can move any resource type: 3D models, images, or template resource JSON files.',
+    description: 'Move or rename a resource on the server. Creates destination directories as needed. Can move any resource type: 3D models, images, or action resource JSON files.',
     inputSchema: z.object({
       sourceName: z.string().describe('Current name/path of the resource'),
       destName: z.string().describe('New name/path for the resource'),

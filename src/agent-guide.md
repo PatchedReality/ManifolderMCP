@@ -9,25 +9,24 @@
 3. `open_scene` → load a scene to work with
 4. Manipulate objects: `create_object`, `update_object`, `delete_object`, `move_object`
 
-## Template Resources (Reusable Scene Fragments)
+## Action Resources
 
-Template resources define reusable arrangements of objects (e.g., a cluster of trees, a furniture set).
+Action resources are JSON files that define functional content (lights, text, rotators, video) that can be attached to objects in scenes.
 
 ### Workflow
 
-1. **Get the schema**: `get_template_resource_schema` → understand the JSON structure
-2. **Create JSON file** locally with the template definition
-3. **Validate**: `validate_template_resource(localPath: "...", type: "scene")` → catches errors before upload
+1. **Get the schema**: `get_action_resource_schema` → understand the JSON structure
+2. **Create JSON file** locally with the action definition
+3. **Validate**: `validate_action_resource(localPath: "...", type: "pointlight")` → catches errors before upload
 4. **Upload**: `upload_resource(localPath: "...")` → pushes to server
-5. **Instantiate**: `create_object` with `resource: "action://scene"` and `resourceName: "/objects/myTemplate.json"`
+5. **Instantiate**: `create_object` with `resource: "action://pointlight"` and `resourceName: "/objects/my-light.json"`
 
-### Template Types
+### Action Types
 
-- `scene` - Reusable object arrangements (most common)
-- `pointlight` - Light sources
-- `showtext` - Text displays (supports `text` and `align` properties only, no color)
-- `rotator` - Rotating objects
-- `video` - Video players
+- `pointlight` - Light sources (`action://pointlight`)
+- `showtext` - Text displays (`action://showtext`, supports `text` and `align` properties only, no color)
+- `rotator` - Rotating objects (`action://rotator`)
+- `video` - Video players (`action://video`)
 
 ### Rotators (The Pivot Pattern)
 
@@ -84,38 +83,9 @@ Rotators work by rotating their **parent container**. To make objects rotate, us
 
 The pivot container (`label-pivot`) has no `resourceReference`, only a `resourceName`. The showtext and rotator are siblings inside the pivot. The rotator spins the pivot, which spins the label.
 
-### Example: Tree Cluster Template
-
-```json
-{
-  "header": { "type": "DATA" },
-  "body": {
-    "blueprint": {
-      "blueprintType": "physical",
-      "pos": [0, 0, 0],
-      "objectBounds": [10, 10, 10],
-      "maxBounds": [10, 10, 10],
-      "children": [
-        {
-          "blueprintType": "physical",
-          "resourceReference": "/objects/pine.glb",
-          "pos": [0, 0, 0]
-        },
-        {
-          "blueprintType": "physical",
-          "resourceReference": "/objects/pine.glb",
-          "pos": [2.5, 0, 1.2],
-          "scale": [0.8, 0.9, 0.8]
-        }
-      ]
-    }
-  }
-}
-```
-
 ## Resource Management
 
-Resources can be: 3D models (.glb), images (.png, .jpg), or template resource JSON files.
+Resources can be: 3D models (.glb), images (.png, .jpg), or action resource JSON files.
 
 ### Single Operations
 - `upload_resource` - Upload a file (creates directories automatically if targetName includes a path)
@@ -151,7 +121,7 @@ Resources can be: 3D models (.glb), images (.png, .jpg), or template resource JS
 
 - Relative URLs (`/objects/Model.glb`) resolve against the fabric host
 - Absolute URLs (`https://cdn.example.com/Model.glb`) used as-is
-- For template resources, use `resource: "action://scene"` with `resourceName: "/objects/template.json"`
+- For action resources, use `resource: "action://pointlight"` (or other action type) with `resourceName: "/objects/my-action.json"`
 
 ### Creating Objects
 
@@ -160,9 +130,9 @@ Resources can be: 3D models (.glb), images (.png, .jpg), or template resource JS
 create_object(parentId: "123", name: "Cube", resource: "/objects/Cube.glb")
 ```
 
-**Template resource (scene):**
+**Action resource (pointlight):**
 ```
-create_object(parentId: "123", name: "Forest", resource: "action://scene", resourceName: "/objects/forest.json")
+create_object(parentId: "123", name: "Light", resource: "action://pointlight", resourceName: "/objects/my-light.json")
 ```
 
 ## Object Deletion

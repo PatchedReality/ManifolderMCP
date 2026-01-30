@@ -20,16 +20,16 @@ export const objectTools = {
     }),
   },
   create_object: {
-    description: 'Create a new object in the scene. For regular 3D models, use resource="/objects/Model.glb". For template resources, use resource="action://scene" with resourceName="/objects/template.json".',
+    description: 'Create a new object in the scene. For regular 3D models, use resource="/objects/Model.glb". For action resources (lights, text, rotators, video), set resource to the action URI and resourceName to the action resource JSON file.',
     inputSchema: z.object({
       parentId: z.string().describe('ID of the parent object'),
       name: z.string().describe('Name for the new object'),
       position: vector3Schema.optional().describe('Position (default: 0,0,0)'),
       rotation: quaternionSchema.optional().describe('Rotation quaternion (default: identity)'),
       scale: vector3Schema.optional().describe('Scale (default: 1,1,1)'),
-      resource: z.string().optional().describe('For .glb models: "/objects/Model.glb". For templates: "action://scene"'),
-      resourceName: z.string().optional().describe('For template resources only: path to the JSON file, e.g. "/objects/template.json"'),
-      bound: vector3Schema.optional().describe('Bounding box size (default: 1,1,1). For templates, set to match objectBounds.'),
+      resource: z.string().optional().describe('Resource URL, e.g. "/objects/Model.glb" or an action URI like "action://pointlight"'),
+      resourceName: z.string().optional().describe('Path to the action resource JSON file when using an action URI, e.g. "/objects/my-light.json"'),
+      bound: vector3Schema.optional().describe('Bounding box size (default: 1,1,1)'),
     }),
   },
   update_object: {

@@ -49,10 +49,10 @@ import {
   handleBulkMoveResources,
   handleDownloadResource,
   handleBulkDownloadResources,
-  templateResourceTools,
-  handleGetTemplateResourceSchema,
-  handleValidateTemplateResource,
-  ActionResourceType,
+  actionResourceTools,
+  handleGetActionResourceSchema,
+  handleValidateActionResource,
+  type ActionResourceType,
 } from './tools/index.js';
 
 const server = new Server(
@@ -85,7 +85,7 @@ const allTools = {
   ...objectTools,
   ...bulkTools,
   ...resourceTools,
-  ...templateResourceTools,
+  ...actionResourceTools,
 };
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -108,7 +108,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
       {
         uri: 'fabric://guide',
         name: 'Fabric MCP Agent Guide',
-        description: 'Workflows and patterns for AI agents: template resources, object manipulation, bulk operations',
+        description: 'Workflows and patterns for AI agents: action resources, object manipulation, bulk operations',
         mimeType: 'text/markdown',
       },
     ],
@@ -229,12 +229,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await handleBulkDownloadResources(await getStorage(), args as Parameters<typeof handleBulkDownloadResources>[1]);
         break;
 
-      // Template resource tools
-      case 'get_template_resource_schema':
-        result = handleGetTemplateResourceSchema();
+      // Action resource tools
+      case 'get_action_resource_schema':
+        result = handleGetActionResourceSchema();
         break;
-      case 'validate_template_resource':
-        result = await handleValidateTemplateResource(args as { localPath: string; type: ActionResourceType });
+      case 'validate_action_resource':
+        result = await handleValidateActionResource(args as { localPath: string; type: ActionResourceType });
         break;
 
       default:

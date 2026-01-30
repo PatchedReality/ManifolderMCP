@@ -117,7 +117,7 @@ claude mcp add fabric node ~/fabric-mcp/dist/index.js
 ### Objects
 - `list_objects` - List objects in a scene with optional filtering
 - `get_object` - Get object details
-- `create_object` - Create new object (supports GLB models and template resources)
+- `create_object` - Create new object (supports GLB models and action resources)
 - `update_object` - Update object properties (name, position, rotation, scale, resource)
 - `delete_object` - Delete object and children (must be in cache)
 - `delete_object_unknown_type` - Delete object when type is unknown (queries server)
@@ -138,12 +138,11 @@ claude mcp add fabric node ~/fabric-mcp/dist/index.js
 - `bulk_delete_resources` - Delete multiple resources in one operation
 - `bulk_move_resources` - Move/rename multiple resources in one operation
 
-### Template Resources
-- `get_template_resource_schema` - Get the JSON schema for template resources
-- `validate_template_resource` - Validate a template resource file
+### Action Resources
+- `get_action_resource_schema` - Get the JSON schema for action resources
+- `validate_action_resource` - Validate an action resource file
 
-Template resources are JSON files that define reusable content:
-- `action://scene` - Reusable scene fragments (clusters of objects)
+Action resources are JSON files that define functional content:
 - `action://pointlight` - Point lights
 - `action://showtext` - Text displays
 - `action://rotator` - Rotating objects
