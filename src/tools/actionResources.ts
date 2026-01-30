@@ -32,8 +32,11 @@ export const actionResourceTools = {
 };
 
 export function handleGetActionResourceSchema(): string {
+  return getFullActionResourceSchema();
+}
+
+export function getFullActionResourceSchema(): string {
   return JSON.stringify({
-    description: 'Action resource formats for Fabric. Action resources are JSON files that define functional content (lights, text, rotators, video) that can be attached to objects in your scenes.',
     commonStructure: {
       header: { type: 'DATA' },
       body: '{ ... type-specific content ... }',

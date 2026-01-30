@@ -109,13 +109,13 @@ claude mcp add fabric node ~/fabric-mcp/dist/index.js
 - `fabric_status` - Get connection state and current scene info
 
 ### Scenes
-- `list_scenes` - List all scenes
+- `list_scenes` - List all scenes (paginated: `offset`, `limit`)
 - `open_scene` - Load a scene
 - `create_scene` - Create new scene
 - `delete_scene` - Delete scene and children
 
 ### Objects
-- `list_objects` - List objects in a scene with optional filtering
+- `list_objects` - List objects in a scene with optional filtering (paginated: `offset`, `limit`)
 - `get_object` - Get object details
 - `create_object` - Create new object (supports GLB models and action resources)
 - `update_object` - Update object properties (name, position, rotation, scale, resource)
@@ -125,12 +125,12 @@ claude mcp add fabric node ~/fabric-mcp/dist/index.js
 
 ### Bulk Operations
 - `bulk_update` - Execute multiple create/update/delete/move operations
-- `find_objects` - Search by name pattern, position radius, or resource URL
+- `find_objects` - Search by name pattern, position radius, or resource URL (paginated: `offset`, `limit`)
 
 ### Resources
 - `upload_resource` - Upload .glb, .png, .json, etc. to server
 - `download_resource` - Download a resource file from the server
-- `list_resources` - List available resources
+- `list_resources` - List available resources (paginated: `offset`, `limit`)
 - `delete_resource` - Remove a resource
 - `move_resource` - Rename or move a resource on the server
 - `bulk_upload_resources` - Upload multiple files in one operation

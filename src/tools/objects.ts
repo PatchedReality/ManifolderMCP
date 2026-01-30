@@ -1,16 +1,19 @@
 import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
 import { quaternionSchema, vector3Schema } from './schemas.js';
+import { paginate } from '../output.js';
 
 export const objectTools = {
   list_objects: {
-    description: 'List already-loaded objects in a scene (shallow). Objects whose children have not been loaded yet will show childCount: "<loading>". Use get_object to load a specific object and its children, or find_objects to deep-search.',
+    description: 'List already-loaded objects in a scene (shallow). Objects whose children have not been loaded yet will show childCount: -1. Use get_object to load a specific object and its children, or find_objects to deep-search.',
     inputSchema: z.object({
       sceneId: z.string().describe('ID of the scene'),
       filter: z.object({
         namePattern: z.string().optional().describe('Regex pattern to filter by name'),
         type: z.string().optional().describe('Object type to filter by'),
       }).optional().describe('Optional filter criteria'),
+      offset: z.number().optional().describe('Skip first N results (default: 0)'),
+      limit: z.number().optional().describe('Max results to return (default: 10)'),
     }),
   },
   get_object: {
@@ -66,19 +69,17 @@ export const objectTools = {
 
 export async function handleListObjects(
   client: MVFabricClient,
-  args: { sceneId: string; filter?: { namePattern?: string; type?: string } }
+  args: { sceneId: string; filter?: { namePattern?: string; type?: string }; offset?: number; limit?: number }
 ): Promise<string> {
   const objects = await client.listObjects(args.sceneId, args.filter);
-  return JSON.stringify({
-    count: objects.length,
-    objects: objects.map(obj => ({
-      id: obj.id,
-      name: obj.name,
-      parentId: obj.parentId,
-      childCount: obj.children === null ? '<loading>' : obj.children.length,
-      hasResource: !!obj.resource,
-    })),
-  });
+  const items = objects.map(obj => ({
+    id: obj.id,
+    name: obj.name,
+    parentId: obj.parentId,
+    childCount: obj.children === null ? -1 : obj.children.length,
+    hasResource: !!obj.resource,
+  }));
+  return JSON.stringify(paginate(items, args.offset, args.limit));
 }
 
 export async function handleGetObject(
@@ -86,8 +87,19 @@ export async function handleGetObject(
   args: { objectId: string }
 ): Promise<string> {
   const obj = await client.getObject(args.objectId);
-  const resolvedResourceUrl = client.resolveResourceName(obj.resourceName);
-  return JSON.stringify({ ...obj, resolvedResourceUrl });
+
+  return JSON.stringify({
+    id: obj.id,
+    name: obj.name,
+    parentId: obj.parentId,
+    position: obj.transform.position,
+    rotation: obj.transform.rotation,
+    scale: obj.transform.scale,
+    resource: obj.resource,
+    resourceName: obj.resourceName,
+    childCount: obj.children === null ? -1 : obj.children.length,
+    children: obj.children,
+  });
 }
 
 export async function handleCreateObject(
@@ -104,7 +116,7 @@ export async function handleCreateObject(
   }
 ): Promise<string> {
   const obj = await client.createObject(args);
-  return JSON.stringify(obj);
+  return JSON.stringify({ id: obj.id, name: obj.name, parentId: obj.parentId });
 }
 
 export async function handleUpdateObject(
@@ -118,8 +130,14 @@ export async function handleUpdateObject(
     resource?: string;
   }
 ): Promise<string> {
-  const obj = await client.updateObject(args);
-  return JSON.stringify(obj);
+  const updated: string[] = [];
+  if (args.name !== undefined) updated.push('name');
+  if (args.position !== undefined) updated.push('position');
+  if (args.rotation !== undefined) updated.push('rotation');
+  if (args.scale !== undefined) updated.push('scale');
+  if (args.resource !== undefined) updated.push('resource');
+  await client.updateObject(args);
+  return JSON.stringify({ id: args.objectId, updated });
 }
 
 export async function handleDeleteObject(
@@ -142,6 +160,6 @@ export async function handleMoveObject(
   client: MVFabricClient,
   args: { objectId: string; newParentId: string }
 ): Promise<string> {
-  const obj = await client.moveObject(args.objectId, args.newParentId);
-  return JSON.stringify(obj);
+  await client.moveObject(args.objectId, args.newParentId);
+  return JSON.stringify({ id: args.objectId, newParentId: args.newParentId });
 }

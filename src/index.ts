@@ -51,6 +51,7 @@ import {
   handleBulkDownloadResources,
   actionResourceTools,
   handleGetActionResourceSchema,
+  getFullActionResourceSchema,
   handleValidateActionResource,
   type ActionResourceType,
 } from './tools/index.js';
@@ -111,6 +112,12 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
         description: 'Workflows and patterns for AI agents: action resources, object manipulation, bulk operations',
         mimeType: 'text/markdown',
       },
+      {
+        uri: 'fabric://action-schema',
+        name: 'Action Resource Schema',
+        description: 'Full schema for action resources (lights, text, rotators, video)',
+        mimeType: 'application/json',
+      },
     ],
   };
 });
@@ -126,6 +133,18 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           uri,
           mimeType: 'text/markdown',
           text: content,
+        },
+      ],
+    };
+  }
+
+  if (uri === 'fabric://action-schema') {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: getFullActionResourceSchema(),
         },
       ],
     };
@@ -157,7 +176,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // Scene tools
       case 'list_scenes':
-        result = await handleListScenes(client);
+        result = await handleListScenes(client, args as Parameters<typeof handleListScenes>[1]);
         break;
       case 'open_scene':
         result = await handleOpenScene(client, args as { sceneId: string });
@@ -205,7 +224,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await handleUploadResource(await getStorage(), args as Parameters<typeof handleUploadResource>[1]);
         break;
       case 'list_resources':
-        result = await handleListResources(await getStorage(), args as { path?: string; filter?: string; recursive?: boolean });
+        result = await handleListResources(await getStorage(), args as Parameters<typeof handleListResources>[1]);
         break;
       case 'delete_resource':
         result = await handleDeleteResource(await getStorage(), args as { resourceName: string });

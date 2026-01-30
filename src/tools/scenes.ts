@@ -1,10 +1,14 @@
 import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
+import { paginate } from '../output.js';
 
 export const sceneTools = {
   list_scenes: {
     description: 'List all scenes in the Fabric',
-    inputSchema: z.object({}),
+    inputSchema: z.object({
+      offset: z.number().optional().describe('Skip first N results (default: 0)'),
+      limit: z.number().optional().describe('Max results to return (default: 10)'),
+    }),
   },
   open_scene: {
     description: 'Load a scene and return the object tree summary',
@@ -26,9 +30,13 @@ export const sceneTools = {
   },
 };
 
-export async function handleListScenes(client: MVFabricClient): Promise<string> {
+export async function handleListScenes(
+  client: MVFabricClient,
+  args: { offset?: number; limit?: number }
+): Promise<string> {
   const scenes = await client.listScenes();
-  return JSON.stringify({ scenes });
+  const items = scenes.map(s => ({ id: s.id, name: s.name }));
+  return JSON.stringify(paginate(items, args.offset, args.limit));
 }
 
 export async function handleOpenScene(
@@ -36,13 +44,22 @@ export async function handleOpenScene(
   args: { sceneId: string }
 ): Promise<string> {
   const root = await client.openScene(args.sceneId);
+  const childCount = root.children === null ? -1 : root.children.length;
+
+  let children: Array<{ id: string; name: string; hasResource: boolean }> | undefined;
+  if (root.children && root.children.length > 0) {
+    const childDetails = await Promise.all(
+      root.children.map(id => client.getObject(id).catch(() => null))
+    );
+    children = childDetails
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .map(c => ({ id: c.id, name: c.name, hasResource: !!c.resource }));
+  }
+
   return JSON.stringify({
     sceneId: args.sceneId,
-    root: {
-      id: root.id,
-      name: root.name,
-      childCount: root.children === null ? '<loading>' : root.children.length,
-    },
+    root: { id: root.id, name: root.name, childCount },
+    children,
   });
 }
 

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
 import type { BulkOperation } from '../types.js';
 import { quaternionSchema, vector3Schema } from './schemas.js';
+import { paginate } from '../output.js';
 
 const operationSchema = z.discriminatedUnion('type', [
   z.object({
@@ -62,6 +63,8 @@ export const bulkTools = {
         }).optional().describe('Search within radius of a point'),
         resourceUrl: z.string().optional().describe('Match objects with this resource URL'),
       }).describe('Search criteria'),
+      offset: z.number().optional().describe('Skip first N results (default: 0)'),
+      limit: z.number().optional().describe('Max results to return (default: 10)'),
     }),
   },
 };
@@ -71,7 +74,12 @@ export async function handleBulkUpdate(
   args: { operations: BulkOperation[] }
 ): Promise<string> {
   const result = await client.bulkUpdate(args.operations);
-  return JSON.stringify(result);
+  return JSON.stringify({
+    success: result.success,
+    failed: result.failed,
+    createdIds: result.createdIds,
+    errors: result.errors,
+  });
 }
 
 export async function handleFindObjects(
@@ -83,17 +91,16 @@ export async function handleFindObjects(
       positionRadius?: { center: { x: number; y: number; z: number }; radius: number };
       resourceUrl?: string;
     };
+    offset?: number;
+    limit?: number;
   }
 ): Promise<string> {
   const objects = await client.findObjects(args.sceneId, args.query);
-  return JSON.stringify({
-    count: objects.length,
-    objects: objects.map(obj => ({
-      id: obj.id,
-      name: obj.name,
-      position: obj.transform.position,
-      resource: obj.resource,
-      childCount: obj.children === null ? '<loading>' : obj.children.length,
-    })),
-  });
+  const items = objects.map(obj => ({
+    id: obj.id,
+    name: obj.name,
+    position: obj.transform.position,
+    resource: obj.resource,
+  }));
+  return JSON.stringify(paginate(items, args.offset, args.limit));
 }

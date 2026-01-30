@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ScpStorage } from '../storage/ScpStorage.js';
+import { paginate } from '../output.js';
 
 export const resourceTools = {
   upload_resource: {
@@ -15,6 +16,8 @@ export const resourceTools = {
       path: z.string().optional().describe('Subdirectory path to list (e.g., "Forest/Trees"). Defaults to root.'),
       filter: z.string().optional().describe('Glob pattern using * as wildcard. Examples: "*.glb" (files ending in .glb), "tree*" (files starting with tree), "*forest*" (files containing forest). Case-insensitive.'),
       recursive: z.boolean().optional().describe('If true, recursively list all subdirectories. Defaults to false.'),
+      offset: z.number().optional().describe('Skip first N results (default: 0)'),
+      limit: z.number().optional().describe('Max results to return (default: 10)'),
     }),
   },
   delete_resource: {
@@ -82,13 +85,14 @@ export async function handleUploadResource(
 
 export async function handleListResources(
   storage: ScpStorage,
-  args: { path?: string; filter?: string; recursive?: boolean }
+  args: { path?: string; filter?: string; recursive?: boolean; offset?: number; limit?: number }
 ): Promise<string> {
   const resources = await storage.list(args.path, args.filter, args.recursive);
-  return JSON.stringify({
-    count: resources.length,
-    resources,
-  });
+  const items = resources.map((r: any) => ({
+    name: r.name ?? r,
+    url: r.url ?? null,
+  }));
+  return JSON.stringify(paginate(items, args.offset, args.limit));
 }
 
 export async function handleDeleteResource(
@@ -115,7 +119,7 @@ export async function handleBulkUploadResources(
   return JSON.stringify({
     successCount: result.success.length,
     failedCount: result.failed.length,
-    ...result,
+    failedItems: result.failed,
   });
 }
 
@@ -128,7 +132,7 @@ export async function handleBulkDeleteResources(
     deletedCount: result.deleted.length,
     failedCount: result.failed.length,
     skippedCount: result.skipped.length,
-    ...result,
+    failedItems: result.failed,
   });
 }
 
@@ -141,7 +145,7 @@ export async function handleBulkMoveResources(
     movedCount: result.moved.length,
     failedCount: result.failed.length,
     skippedCount: result.skipped.length,
-    ...result,
+    failedItems: result.failed,
   });
 }
 
@@ -161,6 +165,6 @@ export async function handleBulkDownloadResources(
   return JSON.stringify({
     successCount: result.success.length,
     failedCount: result.failed.length,
-    ...result,
+    failedItems: result.failed,
   });
 }

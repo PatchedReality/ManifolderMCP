@@ -35,6 +35,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   private objectCache: Map<string, any> = new Map();
   private sceneClassIds: Map<string, number> = new Map();
   private pendingReady: Map<string, { resolve: () => void; reject: (err: Error) => void }> = new Map();
+  private pendingUpdates: Map<string, { remaining: number; resolve: () => void }> = new Map();
   private connectResolve: (() => void) | null = null;
   private connectReject: ((err: Error) => void) | null = null;
   private connectionGeneration = 0;
@@ -45,6 +46,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       || pObject.pName?.wsRMCObjectId
       || `Object ${pObject.twObjectIx}`;
   }
+
 
   private getObjectKey(pObject: any): string {
     return `${pObject.wClass_Object || pObject.sID || 'unknown'}:${pObject.twObjectIx || 0}`;
@@ -108,8 +110,32 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   onUpdated(pNotice: any) {
     const pChild = pNotice.pData?.pChild;
     if (pChild?.twObjectIx) {
-      this.objectCache.set(pChild.twObjectIx.toString(), pChild);
+      const id = pChild.twObjectIx.toString();
+      this.objectCache.set(id, pChild);
+
+      const pending = this.pendingUpdates.get(id);
+      if (pending) {
+        pending.remaining--;
+        if (pending.remaining <= 0) {
+          this.pendingUpdates.delete(id);
+          pending.resolve();
+        }
+      }
     }
+  }
+
+  private waitForUpdates(objectId: string, count: number, timeoutMs: number = 5000): Promise<void> {
+    return new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        this.pendingUpdates.delete(objectId);
+        resolve();
+      }, timeoutMs);
+
+      this.pendingUpdates.set(objectId, {
+        remaining: count,
+        resolve: () => { clearTimeout(timeoutId); resolve(); },
+      });
+    });
   }
 
   onChanged(pNotice: any) {
@@ -345,7 +371,53 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     this.currentSceneId = sceneId;
     this.objectCache.set(sceneId, pObject);
 
+    // Eagerly load direct children so list_objects works immediately
+    await this.loadDirectChildren(pObject);
+
     return this.rmxToRMPObject(pObject);
+  }
+
+  private async loadDirectChildren(pObject: any): Promise<void> {
+    let children: any[] = [];
+    this.enumAllChildTypes(pObject, (child: any) => {
+      children.push(child);
+    });
+
+    // Children may not be enumerable yet if notifications haven't arrived.
+    // Send UPDATE to force-fetch and give async child notifications time to arrive.
+    if (children.length === 0) {
+      debugLog(`[loadDirectChildren] no children enumerable yet, sending UPDATE to trigger child loading`);
+      try {
+        await this.sendAction(pObject, 'UPDATE', () => {});
+      } catch (err) {
+        debugLog(`[loadDirectChildren] UPDATE failed: ${(err as Error).message}`);
+      }
+      // Re-enumerate after UPDATE round-trip
+      children = [];
+      this.enumAllChildTypes(pObject, (child: any) => {
+        children.push(child);
+      });
+    }
+
+    if (children.length > 0) {
+      debugLog(`[loadDirectChildren] opening ${children.length} children`);
+      await Promise.all(children.map(async (child) => {
+        const childId = child.twObjectIx?.toString();
+        if (!childId || this.objectCache.has(childId)) return;
+        try {
+          const classId = child.wClass_Object;
+          let pChild: any;
+          if (classId && MVFabricClient.CLASS_ID_TO_TYPE[classId]) {
+            pChild = await this.openAndWait(MVFabricClient.CLASS_ID_TO_TYPE[classId], child.twObjectIx, 10000);
+          } else {
+            pChild = await this.openAnyObjectType(child.twObjectIx);
+          }
+          this.objectCache.set(childId, pChild);
+        } catch (err) {
+          debugLog(`[loadDirectChildren] failed to open child ${childId}: ${(err as Error).message}`);
+        }
+      }));
+    }
   }
 
   async createScene(name: string): Promise<Scene> {
@@ -510,6 +582,10 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
 
     const newId = response.aResultSet?.[0]?.[0]?.twRMPObjectIx?.toString() || Date.now().toString();
 
+    // Re-fetch parent so its nChildren and child list reflect the new child
+    this.objectCache.delete(params.parentId);
+    await this.openAnyObjectType(parseInt(params.parentId));
+
     return {
       id: newId,
       parentId: params.parentId,
@@ -523,7 +599,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       resourceName: params.resourceName ?? null,
       bound: null,
       classId: ClassIds.RMPObject,
-      children: [],
+      children: null,
     };
   }
 
@@ -587,6 +663,8 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       }
     }
 
+    // Invalidate cache so the next read re-fetches confirmed server state
+    this.objectCache.delete(params.objectId);
     return this.getObject(params.objectId);
   }
 
@@ -643,8 +721,16 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       this.objectCache.set(objectId, pObject);
     }
 
+    let pNewParent = this.objectCache.get(newParentId);
+    if (!pNewParent) {
+      pNewParent = await this.openAnyObjectType(parseInt(newParentId));
+      this.objectCache.set(newParentId, pNewParent);
+    }
+
+    const oldParentId = pObject.twParentIx?.toString();
+
     const response = await this.sendAction(pObject, 'PARENT', (payload: any) => {
-      payload.wClass = ClassIds.RMPObject;
+      payload.wClass = pNewParent.wClass_Object;
       payload.twObjectIx = parseInt(newParentId);
     });
 
@@ -652,30 +738,42 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       throw new Error(`Failed to move object: error ${response.nResult}`);
     }
 
+    // Wait for server update notifications (2 events: old parent + new parent)
+    await this.waitForUpdates(objectId, 2);
+
+    // Invalidate so next reads use the server-updated cache entries
+    this.objectCache.delete(objectId);
+    if (oldParentId) this.objectCache.delete(oldParentId);
+    this.objectCache.delete(newParentId);
+
     return this.getObject(objectId);
   }
 
-  async bulkUpdate(operations: BulkOperation[]): Promise<{ success: number; failed: number; errors: string[] }> {
+  async bulkUpdate(operations: BulkOperation[]): Promise<{ success: number; failed: number; createdIds: string[]; errors: string[] }> {
     let success = 0;
     let failed = 0;
+    const createdIds: string[] = [];
     const errors: string[] = [];
 
     for (const op of operations) {
       try {
         switch (op.type) {
-          case 'create':
-            await this.createObject(op.params as CreateObjectParams);
+          case 'create': {
+            const obj = await this.createObject(op.params as CreateObjectParams);
+            createdIds.push(obj.id);
             break;
+          }
           case 'update':
             await this.updateObject(op.params as UpdateObjectParams);
             break;
           case 'delete':
             await this.deleteObject((op.params as { objectId: string }).objectId);
             break;
-          case 'move':
+          case 'move': {
             const moveParams = op.params as { objectId: string; newParentId: string };
             await this.moveObject(moveParams.objectId, moveParams.newParentId);
             break;
+          }
         }
         success++;
       } catch (error) {
@@ -684,7 +782,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       }
     }
 
-    return { success, failed, errors };
+    return { success, failed, createdIds, errors };
   }
 
   private async loadFullTree(sceneId: string): Promise<RMPObject[]> {
