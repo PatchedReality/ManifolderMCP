@@ -583,8 +583,10 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     const newId = response.aResultSet?.[0]?.[0]?.twRMPObjectIx?.toString() || Date.now().toString();
 
     // Re-fetch parent so its nChildren and child list reflect the new child
-    this.objectCache.delete(params.parentId);
-    await this.openAnyObjectType(parseInt(params.parentId));
+    if (!params.skipParentRefetch) {
+      this.objectCache.delete(params.parentId);
+      await this.openAnyObjectType(parseInt(params.parentId));
+    }
 
     return {
       id: newId,
@@ -665,6 +667,23 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
 
     // Invalidate cache so the next read re-fetches confirmed server state
     this.objectCache.delete(params.objectId);
+    if (params.skipRefetch) {
+      return {
+        id: params.objectId,
+        parentId: pObject.twParentIx?.toString() ?? null,
+        name: params.name ?? this.getObjectName(pObject),
+        transform: {
+          position: params.position ?? { x: pObject.pTransform?.vPosition?.dX ?? 0, y: pObject.pTransform?.vPosition?.dY ?? 0, z: pObject.pTransform?.vPosition?.dZ ?? 0 },
+          rotation: params.rotation ?? { x: pObject.pTransform?.qRotation?.dX ?? 0, y: pObject.pTransform?.qRotation?.dY ?? 0, z: pObject.pTransform?.qRotation?.dZ ?? 0, w: pObject.pTransform?.qRotation?.dW ?? 1 },
+          scale: params.scale ?? { x: pObject.pTransform?.vScale?.dX ?? 1, y: pObject.pTransform?.vScale?.dY ?? 1, z: pObject.pTransform?.vScale?.dZ ?? 1 },
+        },
+        resource: params.resource ?? pObject.pResource?.sReference ?? null,
+        resourceName: pObject.pResource?.sName ?? null,
+        bound: null,
+        classId: pObject.wClass_Object,
+        children: null,
+      };
+    }
     return this.getObject(params.objectId);
   }
 
@@ -712,7 +731,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     this.objectCache.delete(objectId);
   }
 
-  async moveObject(objectId: string, newParentId: string): Promise<RMPObject> {
+  async moveObject(objectId: string, newParentId: string, skipRefetch?: boolean): Promise<RMPObject> {
     this.ensureConnected();
 
     let pObject = this.objectCache.get(objectId);
@@ -738,6 +757,27 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       throw new Error(`Failed to move object: error ${response.nResult}`);
     }
 
+    if (skipRefetch) {
+      // Invalidate moved object and old parent; keep new parent cached for sibling moves
+      this.objectCache.delete(objectId);
+      if (oldParentId) this.objectCache.delete(oldParentId);
+      return {
+        id: objectId,
+        parentId: newParentId,
+        name: this.getObjectName(pObject),
+        transform: {
+          position: { x: pObject.pTransform?.vPosition?.dX ?? 0, y: pObject.pTransform?.vPosition?.dY ?? 0, z: pObject.pTransform?.vPosition?.dZ ?? 0 },
+          rotation: { x: pObject.pTransform?.qRotation?.dX ?? 0, y: pObject.pTransform?.qRotation?.dY ?? 0, z: pObject.pTransform?.qRotation?.dZ ?? 0, w: pObject.pTransform?.qRotation?.dW ?? 1 },
+          scale: { x: pObject.pTransform?.vScale?.dX ?? 1, y: pObject.pTransform?.vScale?.dY ?? 1, z: pObject.pTransform?.vScale?.dZ ?? 1 },
+        },
+        resource: pObject.pResource?.sReference ?? null,
+        resourceName: pObject.pResource?.sName ?? null,
+        bound: null,
+        classId: pObject.wClass_Object,
+        children: null,
+      };
+    }
+
     // Wait for server update notifications (2 events: old parent + new parent)
     await this.waitForUpdates(objectId, 2);
 
@@ -745,7 +785,6 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     this.objectCache.delete(objectId);
     if (oldParentId) this.objectCache.delete(oldParentId);
     this.objectCache.delete(newParentId);
-
     return this.getObject(objectId);
   }
 
@@ -755,30 +794,113 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     const createdIds: string[] = [];
     const errors: string[] = [];
 
+    const CONCURRENCY = 10;
+    const staleParentIds = new Set<string>();
+
+    // Pre-fetch all referenced objects so concurrent ops don't race on openAnyObjectType
+    const idsToPreload = new Set<string>();
     for (const op of operations) {
-      try {
-        switch (op.type) {
-          case 'create': {
-            const obj = await this.createObject(op.params as CreateObjectParams);
-            createdIds.push(obj.id);
-            break;
-          }
-          case 'update':
-            await this.updateObject(op.params as UpdateObjectParams);
-            break;
-          case 'delete':
-            await this.deleteObject((op.params as { objectId: string }).objectId);
-            break;
-          case 'move': {
-            const moveParams = op.params as { objectId: string; newParentId: string };
-            await this.moveObject(moveParams.objectId, moveParams.newParentId);
-            break;
-          }
+      switch (op.type) {
+        case 'create':
+          idsToPreload.add((op.params as CreateObjectParams).parentId);
+          break;
+        case 'update':
+          idsToPreload.add((op.params as UpdateObjectParams).objectId);
+          break;
+        case 'delete':
+          idsToPreload.add((op.params as { objectId: string }).objectId);
+          break;
+        case 'move': {
+          const p = op.params as { objectId: string; newParentId: string };
+          idsToPreload.add(p.objectId);
+          idsToPreload.add(p.newParentId);
+          break;
         }
-        success++;
-      } catch (error) {
-        failed++;
-        errors.push(`${op.type} failed: ${(error as Error).message}`);
+      }
+    }
+    // Remove IDs already cached
+    for (const id of idsToPreload) {
+      if (this.objectCache.has(id)) idsToPreload.delete(id);
+    }
+    if (idsToPreload.size > 0) {
+      debugLog(`[bulkUpdate] pre-fetching ${idsToPreload.size} objects`);
+      for (const id of idsToPreload) {
+        try {
+          const pObj = await this.openAnyObjectType(parseInt(id));
+          this.objectCache.set(id, pObj);
+        } catch (err) {
+          debugLog(`[bulkUpdate] pre-fetch failed for ${id}: ${(err as Error).message}`);
+        }
+      }
+    }
+
+    const executeOp = async (op: BulkOperation): Promise<string | null> => {
+      switch (op.type) {
+        case 'create': {
+          const createParams = op.params as CreateObjectParams;
+          const obj = await this.createObject({ ...createParams, skipParentRefetch: true });
+          staleParentIds.add(createParams.parentId);
+          return obj.id;
+        }
+        case 'update':
+          await this.updateObject({ ...op.params as UpdateObjectParams, skipRefetch: true });
+          return null;
+        case 'delete':
+          await this.deleteObject((op.params as { objectId: string }).objectId);
+          return null;
+        case 'move': {
+          const moveParams = op.params as { objectId: string; newParentId: string };
+          const pObj = this.objectCache.get(moveParams.objectId);
+          const oldParentId = pObj?.twParentIx?.toString();
+          await this.moveObject(moveParams.objectId, moveParams.newParentId, true);
+          if (oldParentId) staleParentIds.add(oldParentId);
+          staleParentIds.add(moveParams.newParentId);
+          return null;
+        }
+      }
+    };
+
+    // Register update listeners for moves BEFORE executing, so we don't miss notifications
+    const moveUpdatePromises: Promise<void>[] = [];
+    for (const op of operations) {
+      if (op.type === 'move') {
+        const id = (op.params as { objectId: string }).objectId;
+        moveUpdatePromises.push(this.waitForUpdates(id, 2, 10000));
+      }
+    }
+
+    // Process all ops concurrently in batches
+    for (let i = 0; i < operations.length; i += CONCURRENCY) {
+      const batch = operations.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(batch.map(op => executeOp(op)));
+
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
+        if (result.status === 'fulfilled') {
+          success++;
+          if (result.value) createdIds.push(result.value);
+        } else {
+          failed++;
+          errors.push(`${batch[j].type} failed: ${result.reason?.message || 'unknown error'}`);
+        }
+      }
+    }
+
+    // Wait for all move update notifications before re-fetching parents
+    if (moveUpdatePromises.length > 0) {
+      await Promise.all(moveUpdatePromises);
+    }
+
+    // Re-fetch stale parents so cache reflects new children
+    if (staleParentIds.size > 0) {
+      for (const parentId of staleParentIds) {
+        try {
+          this.objectCache.delete(parentId);
+          const pParent = await this.openAnyObjectType(parseInt(parentId));
+          this.objectCache.set(parentId, pParent);
+        } catch {
+          // Parent refresh is best-effort
+        }
       }
     }
 

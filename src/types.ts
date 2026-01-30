@@ -68,6 +68,7 @@ export interface CreateObjectParams {
   resource?: string;
   resourceName?: string;
   bound?: Vector3;
+  skipParentRefetch?: boolean;
 }
 
 export interface UpdateObjectParams {
@@ -77,6 +78,7 @@ export interface UpdateObjectParams {
   rotation?: Quaternion;
   scale?: Vector3;
   resource?: string;
+  skipRefetch?: boolean;
 }
 
 export interface BulkOperation {
