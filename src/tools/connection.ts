@@ -36,6 +36,15 @@ export async function handleListProfiles(): Promise<string> {
   return JSON.stringify({ profiles });
 }
 
+const CONNECT_TIMEOUT_MS = 15000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
 export async function handleFabricConnect(
   client: MVFabricClient,
   args: { profile?: string; url?: string }
@@ -45,21 +54,27 @@ export async function handleFabricConnect(
     await client.disconnect();
   }
 
+  let fabricUrl: string;
+  let adminKey: string;
   if (args.url) {
-    await client.connect(args.url, '');
-    return JSON.stringify({
-      success: true,
-      profile: 'anonymous',
-      fabricUrl: args.url,
-    });
+    fabricUrl = args.url;
+    adminKey = '';
+  } else {
+    const profile = await getProfile(args.profile!);
+    fabricUrl = profile.fabricUrl;
+    adminKey = profile.adminKey || '';
   }
 
-  const profile = await getProfile(args.profile!);
-  await client.connect(profile.fabricUrl, profile.adminKey || '');
+  await withTimeout(
+    client.connect(fabricUrl, adminKey),
+    CONNECT_TIMEOUT_MS,
+    `Connection to ${fabricUrl} timed out after ${CONNECT_TIMEOUT_MS / 1000}s`
+  );
+
   return JSON.stringify({
     success: true,
-    profile: args.profile,
-    fabricUrl: profile.fabricUrl,
+    profile: args.url ? 'anonymous' : args.profile,
+    fabricUrl,
   });
 }
 

@@ -179,13 +179,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await handleListScenes(client, args as Parameters<typeof handleListScenes>[1]);
         break;
       case 'open_scene':
-        result = await handleOpenScene(client, args as { sceneId: string });
+        result = await handleOpenScene(client, args as Parameters<typeof handleOpenScene>[1]);
         break;
       case 'create_scene':
-        result = await handleCreateScene(client, args as { name: string });
+        result = await handleCreateScene(client, args as Parameters<typeof handleCreateScene>[1]);
         break;
       case 'delete_scene':
-        result = await handleDeleteScene(client, args as { sceneId: string });
+        result = await handleDeleteScene(client, args as Parameters<typeof handleDeleteScene>[1]);
         break;
 
       // Object tools

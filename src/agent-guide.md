@@ -1,9 +1,10 @@
-# Fabric MCP Agent Guide
+C# Fabric MCP Agent Guide
 
 ## Core Workflow
 
-1. **Connect** to a Fabric server
-   - **By profile**: `fabric_connect(profile: "earth")` — uses a pre-configured profile with credentials
+1. **Connect** to a Fabric server (one of):
+   - **Scene tools auto-connect**: `list_scenes(profile: "earth")` — connects and lists in one call. All scene tools (`list_scenes`, `open_scene`, `create_scene`, `delete_scene`) accept optional `profile` or `url` params to auto-connect if not already connected.
+   - **Explicit connect**: `fabric_connect(profile: "earth")` — uses a pre-configured profile with credentials
    - **By URL**: `fabric_connect(url: "https://example.com/fabric/72/1")` — anonymous read-only connection
    - Use `list_profiles` if you don't know which profiles are available
 2. **List scenes**: `list_scenes` → returns all scenes on the server
@@ -73,10 +74,10 @@ Name queries use server-side begins-with matching. Position and resource queries
 
 ## Scenes
 
-- `list_scenes` — list all scenes (paginated)
-- `open_scene(sceneId: "...")` — load a scene and its direct children; returns root info and child summaries. After this call, `list_objects` will show the full first level immediately.
-- `create_scene(name: "My Scene")` — create a new empty scene
-- `delete_scene(sceneId: "...")` — delete a scene and all its children
+- `list_scenes` — list all scenes (paginated). Accepts optional `profile` or `url` to auto-connect. Always show the `url` field when displaying results.
+- `open_scene(sceneId: "...")` — load a scene and its direct children; returns root info and child summaries. After this call, `list_objects` will show the full first level immediately. Accepts optional `profile` or `url` to auto-connect.
+- `create_scene(name: "My Scene")` — create a new empty scene. Accepts optional `profile` or `url` to auto-connect.
+- `delete_scene(sceneId: "...")` — delete a scene and all its children. Accepts optional `profile` or `url` to auto-connect.
 
 ## Resource Management
 
@@ -266,7 +267,7 @@ Fabric scenes and resource libraries can be large — hundreds of objects per sc
 
 - If a tool call fails, `isError` is `true` and the text starts with `"Error: "`
 - Common errors:
-  - `"Not connected"` — call `fabric_connect` first
+  - `"Not connected"` — pass a `profile` or `url` param (scene tools auto-connect), or call `fabric_connect` first
   - `"Object not in cache"` — use `get_object` to load it, or use `delete_object_unknown_type`
 - `bulk_update` continues on individual failures and reports them in the `errors` array
 - Bulk resource operations report failures in `failedItems`

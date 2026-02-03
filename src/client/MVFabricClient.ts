@@ -348,7 +348,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       const name = this.getObjectName(pRMXObject);
       const classId = pRMXObject.wClass_Object;
       this.sceneClassIds.set(id, classId);
-      scenes.push({ id, name, rootObjectId: id });
+      scenes.push({ id, name, rootObjectId: id, classId });
     };
 
     this.enumAllChildTypes(this.pRMRoot, enumCallback);
@@ -1027,7 +1027,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
 
   private ensureConnected(): void {
     if (!this.connected) {
-      throw new Error('Not connected. Call fabric_connect first, or wait for auto-reconnect.');
+      throw new Error('Not connected. Call fabric_connect first.');
     }
   }
 

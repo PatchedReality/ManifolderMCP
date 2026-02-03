@@ -46,6 +46,7 @@ export interface Scene {
   id: string;
   name: string;
   rootObjectId: string;
+  classId: number;
 }
 
 export interface ObjectFilter {
