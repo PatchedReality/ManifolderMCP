@@ -121,7 +121,17 @@ export async function handleCreateScene(
 ): Promise<string> {
   await ensureConnection(client, args);
   const scene = await client.createScene(args.name);
-  return JSON.stringify({ scene });
+
+  const rootUrl = client.getResourceRootUrl();
+  let url: string | undefined;
+  if (rootUrl) {
+    const scenes = await client.listScenes();
+    const created = scenes.find(s => s.id === scene.id);
+    const classId = created?.classId ?? 73;
+    url = `${rootUrl}/fabric/${classId}/${scene.id}`;
+  }
+
+  return JSON.stringify({ scene: { ...scene, url } });
 }
 
 export async function handleDeleteScene(
