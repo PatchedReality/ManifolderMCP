@@ -625,26 +625,22 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
 
     if (params.position !== undefined || params.rotation !== undefined || params.scale !== undefined) {
       const response = await this.sendAction(pObject, 'TRANSFORM', (payload: any) => {
-        if (params.position) {
-          payload.pTransform.vPosition.dX = params.position.x;
-          payload.pTransform.vPosition.dY = params.position.y;
-          payload.pTransform.vPosition.dZ = params.position.z;
-        }
-        if (params.rotation) {
-          payload.pTransform.qRotation.dX = params.rotation.x;
-          payload.pTransform.qRotation.dY = params.rotation.y;
-          payload.pTransform.qRotation.dZ = params.rotation.z;
-          payload.pTransform.qRotation.dW = params.rotation.w;
-        }
-        if (params.scale) {
-          payload.pTransform.vScale.dX = params.scale.x;
-          payload.pTransform.vScale.dY = params.scale.y;
-          payload.pTransform.vScale.dZ = params.scale.z;
-        }
+        // Always fill the full transform from current state, then override with provided values
+        payload.pTransform.vPosition.dX = params.position?.x ?? pObject.pTransform?.vPosition?.dX ?? 0;
+        payload.pTransform.vPosition.dY = params.position?.y ?? pObject.pTransform?.vPosition?.dY ?? 0;
+        payload.pTransform.vPosition.dZ = params.position?.z ?? pObject.pTransform?.vPosition?.dZ ?? 0;
+        payload.pTransform.qRotation.dX = params.rotation?.x ?? pObject.pTransform?.qRotation?.dX ?? 0;
+        payload.pTransform.qRotation.dY = params.rotation?.y ?? pObject.pTransform?.qRotation?.dY ?? 0;
+        payload.pTransform.qRotation.dZ = params.rotation?.z ?? pObject.pTransform?.qRotation?.dZ ?? 0;
+        payload.pTransform.qRotation.dW = params.rotation?.w ?? pObject.pTransform?.qRotation?.dW ?? 1;
+        payload.pTransform.vScale.dX = params.scale?.x ?? pObject.pTransform?.vScale?.dX ?? 1;
+        payload.pTransform.vScale.dY = params.scale?.y ?? pObject.pTransform?.vScale?.dY ?? 1;
+        payload.pTransform.vScale.dZ = params.scale?.z ?? pObject.pTransform?.vScale?.dZ ?? 1;
       });
       if (response.nResult !== 0) {
         throw new Error(`Failed to update transform: error ${response.nResult}`);
       }
+
     }
 
     if (params.resource !== undefined) {
