@@ -335,7 +335,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async listScenes(): Promise<Scene[]> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.waitForReady(this.pRMRoot);
 
     const scenes: Scene[] = [];
@@ -356,7 +356,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async openScene(sceneId: string): Promise<RMPObject> {
-    this.ensureConnected();
+    await this.ensureConnected();
 
     const classId = this.sceneClassIds.get(sceneId);
     let pObject: any;
@@ -421,7 +421,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async createScene(name: string): Promise<Scene> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.waitForReady(this.pRMRoot);
 
     const response = await this.sendAction(this.pRMRoot, 'RMPOBJECT_OPEN', (payload: any) => {
@@ -458,7 +458,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async deleteScene(sceneId: string): Promise<void> {
-    this.ensureConnected();
+    await this.ensureConnected();
     await this.waitForReady(this.pRMRoot);
 
     const response = await this.sendAction(this.pRMRoot, 'RMPOBJECT_CLOSE', (payload: any) => {
@@ -485,7 +485,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async listObjects(sceneId: string, filter?: ObjectFilter): Promise<RMPObject[]> {
-    this.ensureConnected();
+    await this.ensureConnected();
 
     if (!this.objectCache.has(sceneId)) {
       await this.openAnyObjectType(parseInt(sceneId));
@@ -520,7 +520,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async getObject(objectId: string): Promise<RMPObject> {
-    this.ensureConnected();
+    await this.ensureConnected();
 
     let pObject = this.objectCache.get(objectId);
     if (pObject) {
@@ -543,7 +543,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async createObject(params: CreateObjectParams): Promise<RMPObject> {
-    this.ensureConnected();
+    await this.ensureConnected();
 
     let pParent = this.objectCache.get(params.parentId);
     if (!pParent) {
@@ -606,7 +606,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async updateObject(params: UpdateObjectParams): Promise<RMPObject> {
-    this.ensureConnected();
+    await this.ensureConnected();
 
     let pObject = this.objectCache.get(params.objectId);
     if (!pObject) {
@@ -684,7 +684,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async deleteObject(objectId: string, allowUnknownType?: boolean): Promise<void> {
-    this.ensureConnected();
+    await this.ensureConnected();
 
     let pObject = this.objectCache.get(objectId);
     if (!pObject) {
@@ -728,7 +728,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async moveObject(objectId: string, newParentId: string, skipRefetch?: boolean): Promise<RMPObject> {
-    this.ensureConnected();
+    await this.ensureConnected();
 
     let pObject = this.objectCache.get(objectId);
     if (!pObject) {
@@ -942,7 +942,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   async findObjects(sceneId: string, query: SearchQuery): Promise<RMPObject[]> {
-    this.ensureConnected();
+    await this.ensureConnected();
 
     // Use server-side SEARCH when we have a text query
     if (query.namePattern) {
@@ -1021,10 +1021,13 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     return results;
   }
 
-  private ensureConnected(): void {
-    if (!this.connected) {
-      throw new Error('Not connected. Call fabric_connect first.');
+  private async ensureConnected(): Promise<void> {
+    if (this.connected) return;
+    if (this.fabricUrl && this.adminKey != null) {
+      await this.connect(this.fabricUrl, this.adminKey);
+      return;
     }
+    throw new Error('Not connected. Call fabric_connect first.');
   }
 
   private sendAction(pObject: any, actionName: string, fillPayload: (payload: any) => void): Promise<any> {
