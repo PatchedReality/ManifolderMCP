@@ -277,6 +277,14 @@ async function main() {
   console.error('Fabric MCP server running on stdio');
 }
 
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+});
+
 main().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);

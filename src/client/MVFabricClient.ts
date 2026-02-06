@@ -1,11 +1,8 @@
 // @ts-nocheck - MVMF libraries are untyped JavaScript
 import '../vendor/mv/index.js';
-import { appendFileSync } from 'fs';
 
-const DEBUG_LOG = '/tmp/fabric-mcp-debug.log';
-function debugLog(msg: string) {
-  appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${msg}\n`);
-}
+// Debug logging (disabled in production)
+function debugLog(_msg: string) {}
 
 import type {
   BulkOperation,
@@ -35,7 +32,8 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   private objectCache: Map<string, any> = new Map();
   private sceneClassIds: Map<string, number> = new Map();
   private pendingReady: Map<string, { resolve: () => void; reject: (err: Error) => void }> = new Map();
-  private pendingUpdates: Map<string, { remaining: number; resolve: () => void }> = new Map();
+  private pendingUpdates: Map<string, { remaining: number; resolve: () => void; reject: (err: Error) => void }> = new Map();
+  private attachedObjects: Set<any> = new Set();
   private connectResolve: (() => void) | null = null;
   private connectReject: ((err: Error) => void) | null = null;
   private connectionGeneration = 0;
@@ -76,81 +74,131 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   }
 
   onReadyState(pNotice: any) {
-    this.handleReadyState(pNotice);
+    try {
+      this.handleReadyState(pNotice);
 
-    const pObject = pNotice.pCreator;
-    if (!pObject) return;
+      const pObject = pNotice.pCreator;
+      if (!pObject) return;
 
-    const key = this.getObjectKey(pObject);
-    const isReady = pObject.IsReady?.();
-    const state = pObject.ReadyState?.();
-    debugLog(`[onReadyState] key=${key} isReady=${isReady} state=${state} sID=${pObject.sID} wClass=${pObject.wClass_Object} twObj=${pObject.twObjectIx} pendingKeys=[${[...this.pendingReady.keys()].join(',')}]`);
+      const key = this.getObjectKey(pObject);
+      const isReady = pObject.IsReady?.();
+      const state = pObject.ReadyState?.();
+      debugLog(`[onReadyState] key=${key} isReady=${isReady} state=${state} sID=${pObject.sID} wClass=${pObject.wClass_Object} twObj=${pObject.twObjectIx} pendingKeys=[${[...this.pendingReady.keys()].join(',')}]`);
 
-    const pending = this.pendingReady.get(key);
-    if (pending) {
-      if (isReady) {
-        this.pendingReady.delete(key);
-        pending.resolve();
-      } else if (state === pObject.eSTATE?.ERROR) {
-        this.pendingReady.delete(key);
-        pending.reject(new Error('Object failed to load'));
+      const pending = this.pendingReady.get(key);
+      if (pending) {
+        if (isReady) {
+          this.pendingReady.delete(key);
+          pending.resolve();
+        } else if (state === pObject.eSTATE?.ERROR) {
+          this.pendingReady.delete(key);
+          pending.reject(new Error('Object failed to load'));
+        }
       }
+    } catch (err) {
+      debugLog(`[onReadyState] ERROR: ${(err as Error).message}`);
     }
   }
 
   onInserted(pNotice: any) {
-    const pChild = pNotice.pData?.pChild;
-    const pParent = pNotice.pCreator;
-    debugLog(`[onInserted] parent=${pParent?.twObjectIx} parentClass=${pParent?.wClass_Object} child=${pChild?.twObjectIx} childClass=${pChild?.wClass_Object} childName=${pChild?.pName?.wsRMPObjectId || pChild?.pName?.wsRMTObjectId || pChild?.pName?.wsRMCObjectId}`);
-    if (pChild?.twObjectIx) {
-      this.objectCache.set(pChild.twObjectIx.toString(), pChild);
+    try {
+      const pChild = pNotice.pData?.pChild;
+      const pParent = pNotice.pCreator;
+      debugLog(`[onInserted] parent=${pParent?.twObjectIx} parentClass=${pParent?.wClass_Object} child=${pChild?.twObjectIx} childClass=${pChild?.wClass_Object} childName=${pChild?.pName?.wsRMPObjectId || pChild?.pName?.wsRMTObjectId || pChild?.pName?.wsRMCObjectId}`);
+      if (pChild?.twObjectIx) {
+        this.objectCache.set(pChild.twObjectIx.toString(), pChild);
+      }
+    } catch (err) {
+      debugLog(`[onInserted] ERROR: ${(err as Error).message}`);
     }
   }
 
   onUpdated(pNotice: any) {
-    const pChild = pNotice.pData?.pChild;
-    if (pChild?.twObjectIx) {
-      const id = pChild.twObjectIx.toString();
-      this.objectCache.set(id, pChild);
+    try {
+      const pChild = pNotice.pData?.pChild;
+      if (pChild?.twObjectIx) {
+        const id = pChild.twObjectIx.toString();
+        this.objectCache.set(id, pChild);
 
-      const pending = this.pendingUpdates.get(id);
-      if (pending) {
-        pending.remaining--;
-        if (pending.remaining <= 0) {
-          this.pendingUpdates.delete(id);
-          pending.resolve();
+        const pending = this.pendingUpdates.get(id);
+        if (pending) {
+          pending.remaining--;
+          if (pending.remaining <= 0) {
+            this.pendingUpdates.delete(id);
+            pending.resolve();
+          }
         }
       }
+    } catch (err) {
+      debugLog(`[onUpdated] ERROR: ${(err as Error).message}`);
     }
   }
 
   private waitForUpdates(objectId: string, count: number, timeoutMs: number = 5000): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.pendingUpdates.delete(objectId);
-        resolve();
+        reject(new Error(`Timeout waiting for ${count} update(s) on object ${objectId}`));
       }, timeoutMs);
 
       this.pendingUpdates.set(objectId, {
         remaining: count,
         resolve: () => { clearTimeout(timeoutId); resolve(); },
+        reject: (err: Error) => { clearTimeout(timeoutId); reject(err); },
       });
     });
   }
 
-  onChanged(pNotice: any) {
-    this.onUpdated(pNotice);
-  }
-
-  onDeleting(pNotice: any) {
-    const pChild = pNotice.pData?.pChild;
-    if (pChild?.twObjectIx) {
-      const id = pChild.twObjectIx.toString();
-      this.objectCache.delete(id);
+  private attachTo(pObject: any): void {
+    if (pObject && !this.attachedObjects.has(pObject)) {
+      pObject.Attach(this);
+      this.attachedObjects.add(pObject);
     }
   }
 
-  async connect(fabricUrl: string, adminKey: string): Promise<void> {
+  private detachFrom(pObject: any): void {
+    if (pObject && this.attachedObjects.has(pObject)) {
+      try {
+        pObject.Detach(this);
+      } catch {
+        // Ignore errors during detach
+      }
+      this.attachedObjects.delete(pObject);
+    }
+  }
+
+  private detachAll(): void {
+    for (const pObject of this.attachedObjects) {
+      try {
+        pObject.Detach(this);
+      } catch {
+        // Ignore errors during detach
+      }
+    }
+    this.attachedObjects.clear();
+  }
+
+  onChanged(pNotice: any) {
+    try {
+      this.onUpdated(pNotice);
+    } catch (err) {
+      debugLog(`[onChanged] ERROR: ${(err as Error).message}`);
+    }
+  }
+
+  onDeleting(pNotice: any) {
+    try {
+      const pChild = pNotice.pData?.pChild;
+      if (pChild?.twObjectIx) {
+        const id = pChild.twObjectIx.toString();
+        this.objectCache.delete(id);
+      }
+    } catch (err) {
+      debugLog(`[onDeleting] ERROR: ${(err as Error).message}`);
+    }
+  }
+
+  async connect(fabricUrl: string, adminKey: string, timeoutMs: number = 60000): Promise<void> {
     if (this.connected || this.pFabric) {
       await this.disconnect();
     }
@@ -159,13 +207,32 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     this.adminKey = adminKey;
     this.loginAttempted = false;
     ++this.connectionGeneration;
+    const capturedGeneration = this.connectionGeneration;
 
     return new Promise((resolve, reject) => {
-      this.connectResolve = resolve;
-      this.connectReject = reject;
+      const timeoutId = setTimeout(() => {
+        if (this.connectionGeneration === capturedGeneration) {
+          this.connectResolve = null;
+          this.connectReject = null;
+          reject(new Error(`Connection timeout after ${timeoutMs}ms`));
+        }
+      }, timeoutMs);
+
+      this.connectResolve = () => {
+        if (this.connectionGeneration === capturedGeneration) {
+          clearTimeout(timeoutId);
+          resolve();
+        }
+      };
+      this.connectReject = (err: Error) => {
+        if (this.connectionGeneration === capturedGeneration) {
+          clearTimeout(timeoutId);
+          reject(err);
+        }
+      };
 
       this.pFabric = new MV.MVRP.MSF(fabricUrl, MV.MVRP.MSF.eMETHOD.GET);
-      this.pFabric.Attach(this);
+      this.attachTo(this.pFabric);
     });
   }
 
@@ -184,7 +251,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
           this.connectReject = null;
           return;
         }
-        this.pLnG.Attach(this);
+        this.attachTo(this.pLnG);
       } else if (this.pFabric.ReadyState() === this.pFabric.eSTATE.ERROR) {
         this.connectReject?.(new Error('Failed to load fabric config from ' + this.fabricUrl));
         this.connectResolve = null;
@@ -222,10 +289,17 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
         }
       } else if (state === this.pLnG.eSTATE.DISCONNECTED) {
         if (this.connected) {
-          this.connected = false;
-          this.loggedIn = false;
+          this.handleUnexpectedDisconnect();
         } else {
           this.connectReject?.(new Error('Disconnected from server'));
+          this.connectResolve = null;
+          this.connectReject = null;
+        }
+      } else if (state === this.pLnG.eSTATE.ERROR) {
+        if (this.connected) {
+          this.handleUnexpectedDisconnect();
+        } else {
+          this.connectReject?.(new Error('LnG connection error'));
           this.connectResolve = null;
           this.connectReject = null;
         }
@@ -233,9 +307,26 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     }
   }
 
+  private handleUnexpectedDisconnect(): void {
+    this.connected = false;
+    this.loggedIn = false;
+
+    // Reject all pending object-ready promises
+    for (const [, pending] of this.pendingReady) {
+      pending.reject(new Error('Connection lost'));
+    }
+    this.pendingReady.clear();
+
+    // Reject all pending update promises
+    for (const [, pending] of this.pendingUpdates) {
+      pending.reject(new Error('Connection lost'));
+    }
+    this.pendingUpdates.clear();
+  }
+
   private start() {
     this.pRMRoot = this.pLnG.Model_Open('RMRoot', 1);
-    this.pRMRoot.Attach(this);
+    this.attachTo(this.pRMRoot);
   }
 
   private async openAndWait(modelType: string, objectId: number, timeoutMs?: number): Promise<any> {
@@ -243,7 +334,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     if (!pObject) {
       throw new Error(`Failed to open ${modelType} with id ${objectId}`);
     }
-    pObject.Attach(this);
+    this.attachTo(pObject);
     await this.waitForReady(pObject, timeoutMs);
     return pObject;
   }
@@ -297,6 +388,15 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       pending.reject(new Error('Disconnected'));
     }
     this.pendingReady.clear();
+
+    // Reject all pending update promises
+    for (const [key, pending] of this.pendingUpdates) {
+      pending.reject(new Error('Disconnected'));
+    }
+    this.pendingUpdates.clear();
+
+    // Detach from all MVMF objects before destroying
+    this.detachAll();
 
     if (this.pRMRoot) {
       try {
@@ -830,6 +930,8 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       }
     }
 
+    const successfulMoveIds = new Set<string>();
+
     const executeOp = async (op: BulkOperation): Promise<string | null> => {
       switch (op.type) {
         case 'create': {
@@ -849,6 +951,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
           const pObj = this.objectCache.get(moveParams.objectId);
           const oldParentId = pObj?.twParentIx?.toString();
           await this.moveObject(moveParams.objectId, moveParams.newParentId, true);
+          successfulMoveIds.add(moveParams.objectId);
           if (oldParentId) staleParentIds.add(oldParentId);
           staleParentIds.add(moveParams.newParentId);
           return null;
@@ -857,11 +960,11 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     };
 
     // Register update listeners for moves BEFORE executing, so we don't miss notifications
-    const moveUpdatePromises: Promise<void>[] = [];
+    const moveUpdatePromises = new Map<string, Promise<void>>();
     for (const op of operations) {
       if (op.type === 'move') {
         const id = (op.params as { objectId: string }).objectId;
-        moveUpdatePromises.push(this.waitForUpdates(id, 2, 10000));
+        moveUpdatePromises.set(id, this.waitForUpdates(id, 2, 10000));
       }
     }
 
@@ -878,13 +981,22 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
         } else {
           failed++;
           errors.push(`${batch[j].type} failed: ${result.reason?.message || 'unknown error'}`);
+          // Cancel pending update listener for failed moves
+          const op = batch[j];
+          if (op.type === 'move') {
+            const id = (op.params as { objectId: string }).objectId;
+            this.pendingUpdates.delete(id);
+          }
         }
       }
     }
 
-    // Wait for all move update notifications before re-fetching parents
-    if (moveUpdatePromises.length > 0) {
-      await Promise.all(moveUpdatePromises);
+    // Wait only for successful move update notifications before re-fetching parents
+    const successfulMovePromises = Array.from(successfulMoveIds)
+      .map(id => moveUpdatePromises.get(id))
+      .filter((p): p is Promise<void> => p !== undefined);
+    if (successfulMovePromises.length > 0) {
+      await Promise.allSettled(successfulMovePromises);
     }
 
     // Re-fetch stale parents so cache reflects new children
@@ -1030,7 +1142,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     throw new Error('Not connected. Call fabric_connect first.');
   }
 
-  private sendAction(pObject: any, actionName: string, fillPayload: (payload: any) => void): Promise<any> {
+  private sendAction(pObject: any, actionName: string, fillPayload: (payload: any) => void, timeoutMs: number = 30000): Promise<any> {
     return new Promise((resolve, reject) => {
       const pIAction = pObject.Request(actionName);
       if (!pIAction) {
@@ -1040,8 +1152,20 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
 
       fillPayload(pIAction.pRequest);
 
+      let completed = false;
+      const timeoutId = setTimeout(() => {
+        if (!completed) {
+          completed = true;
+          reject(new Error(`Timeout waiting for ${actionName} action response`));
+        }
+      }, timeoutMs);
+
       pIAction.Send(this, (pIAction: any) => {
-        resolve(pIAction.pResponse);
+        if (!completed) {
+          completed = true;
+          clearTimeout(timeoutId);
+          resolve(pIAction.pResponse);
+        }
       });
     });
   }

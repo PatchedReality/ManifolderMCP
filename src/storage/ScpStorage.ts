@@ -42,6 +42,8 @@ export class ScpStorage {
       host: this.config.scpHost!,
       username: this.config.scpUser!,
       privateKey,
+      readyTimeout: 20000,
+      timeout: 30000,
     });
 
     return sftp;

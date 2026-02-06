@@ -1204,7 +1204,8 @@ MV.MVIO.SERVICE.CLIENT.NET = class
          {
             autoConnect:   false,
             reconnection:  false,
-            transports:    ['websocket']
+            transports:    ['websocket'],
+            rejectUnauthorized: false  // Allow servers with incomplete SSL cert chains
          };
          const sUrl = this.EndPoint (bSecure, sHost, wPort);
 

@@ -1,4 +1,5 @@
 // Node.js shim for browser APIs used by MVMF libraries
+import WebSocket from 'ws';
 
 // Use native fetch (Node 18+) or throw helpful error
 const doFetch = globalThis.fetch ?? (() => {
@@ -12,11 +13,19 @@ globalThis.XMLHttpRequest = class XMLHttpRequest {
     this.status = 0;
     this.statusText = '';
     this.responseText = '';
-    this.onreadystatechange = null;
+    this._onreadystatechange = null;
     this._method = 'GET';
     this._url = '';
     this._headers = {};
     this._async = true;
+  }
+
+  get onreadystatechange() {
+    return this._onreadystatechange;
+  }
+
+  set onreadystatechange(fn) {
+    this._onreadystatechange = fn;
   }
 
   open(method, url, async = true) {
@@ -34,6 +43,7 @@ globalThis.XMLHttpRequest = class XMLHttpRequest {
     const options = {
       method: this._method,
       headers: this._headers,
+      signal: AbortSignal.timeout(30000),
     };
     if (body && this._method !== 'GET') {
       options.body = body;
@@ -45,16 +55,16 @@ globalThis.XMLHttpRequest = class XMLHttpRequest {
         this.statusText = response.statusText;
         this.responseText = await response.text();
         this.readyState = 4;
-        if (this.onreadystatechange) {
-          this.onreadystatechange();
+        if (this._onreadystatechange) {
+          this._onreadystatechange();
         }
       })
       .catch((error) => {
         this.status = 0;
         this.statusText = error.message;
         this.readyState = 4;
-        if (this.onreadystatechange) {
-          this.onreadystatechange();
+        if (this._onreadystatechange) {
+          this._onreadystatechange();
         }
       });
   }
@@ -63,7 +73,6 @@ globalThis.XMLHttpRequest = class XMLHttpRequest {
 // Stub navigator for FINGERPRINT class (returns dummy values)
 // Node.js v21+ has a built-in read-only navigator, so we extend it
 if (typeof globalThis.navigator !== 'undefined') {
-  // Extend existing navigator with missing properties
   Object.defineProperties(globalThis.navigator, {
     appVersion: { value: '1.0', writable: true, configurable: true },
     appName: { value: 'fabric-mcp', writable: true, configurable: true },
@@ -140,6 +149,9 @@ if (typeof globalThis.window === 'undefined') {
     },
   };
 }
+
+// Real WebSocket from 'ws' package
+globalThis.WebSocket = WebSocket;
 
 // Stub localStorage/sessionStorage
 if (typeof globalThis.localStorage === 'undefined') {
