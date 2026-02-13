@@ -13,6 +13,8 @@ export const quaternionSchema = z.object({
   w: z.number(),
 });
 
+export const objectTypeSchema = z.enum(['parcel', 'container', 'model', 'action', 'terrestrial-root']);
+
 // Action body schemas
 export const pointlightBodySchema = z.object({
   color: z.tuple([z.number(), z.number(), z.number(), z.number()]),

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
-import { quaternionSchema, vector3Schema } from './schemas.js';
+import { objectTypeSchema, quaternionSchema, vector3Schema } from './schemas.js';
 import { paginate } from '../output.js';
+import type { ObjectType } from '../types.js';
 
 export const objectTools = {
   list_objects: {
@@ -33,6 +34,7 @@ export const objectTools = {
       resource: z.string().optional().describe('Resource URL, e.g. "/objects/Model.glb" or an action URI like "action://pointlight"'),
       resourceName: z.string().optional().describe('Path to the action resource JSON file when using an action URI, e.g. "/objects/my-light.json"'),
       bound: vector3Schema.optional().describe('Bounding box size (default: 1,1,1)'),
+      objectType: objectTypeSchema.optional().describe('Object type: "parcel" creates a Terrestrial parcel (class 72, bType 10), "terrestrial-root" creates a Terrestrial root (class 72, bType 1), others create Physical objects (class 73, bType 0). Default: Physical object'),
     }),
   },
   update_object: {
@@ -113,6 +115,7 @@ export async function handleCreateObject(
     resource?: string;
     resourceName?: string;
     bound?: { x: number; y: number; z: number };
+    objectType?: ObjectType;
   }
 ): Promise<string> {
   const obj = await client.createObject(args);

@@ -6,6 +6,9 @@ export const ClassIds = {
   RMPObject: 73,
 } as const;
 
+// Object types for create_object
+export type ObjectType = 'parcel' | 'container' | 'model' | 'action' | 'terrestrial-root';
+
 export interface Vector3 {
   x: number;
   y: number;
@@ -69,6 +72,7 @@ export interface CreateObjectParams {
   resource?: string;
   resourceName?: string;
   bound?: Vector3;
+  objectType?: ObjectType;
   skipParentRefetch?: boolean;
 }
 

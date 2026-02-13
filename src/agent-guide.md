@@ -17,9 +17,25 @@ C# Fabric MCP Agent Guide
 
 ### Creating Objects
 
+Objects are created with different types depending on their purpose. Use the `objectType` parameter to specify the type:
+
+| objectType | Class | Use Case |
+|------------|-------|----------|
+| `parcel` | Terrestrial (72) | Land parcels within a scene |
+| `container` | Physical (73) | Empty grouping objects, pivots |
+| `model` | Physical (73) | 3D models with GLB resources |
+| `action` | Physical (73) | Lights, text, rotators, video |
+
+If `objectType` is omitted, it defaults to a Physical object (class 73).
+
 **3D model:**
 ```
 create_object(parentId: "123", name: "Tree", resource: "/objects/Tree.glb")
+```
+
+**Parcel** (Terrestrial object for land subdivision):
+```
+create_object(parentId: "123", name: "Plot A", objectType: "parcel", bound: {x:50, y:50, z:50})
 ```
 
 **Empty container** (no `resource`, used for grouping/pivots):
@@ -190,8 +206,10 @@ The pivot has no `resource` — it's just a container. The showtext and rotator 
 ### Parameter Clarifications
 
 **`bound`**: Sets the bounding box size of an object. Use it for:
-- Empty containers (pivots) to define their spatial extent
-- Action resources (rotators, text) that have no inherent geometry
+- **Parcels**: Set to the parcel's physical dimensions (e.g., `{x:100, y:100, z:50}` for a 100×100 land plot)
+- **Models**: Set to a size that encompasses the GLB model geometry
+- **Containers/pivots**: Define their spatial extent
+- **Action resources**: Rotators, text, etc. that have no inherent geometry
 - Defaults to `{x:1, y:1, z:1}` if omitted
 
 **`resourceName`**: Its meaning depends on context:

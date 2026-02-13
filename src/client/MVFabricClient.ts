@@ -524,9 +524,9 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     await this.ensureConnected();
     await this.waitForReady(this.pRMRoot);
 
-    const response = await this.sendAction(this.pRMRoot, 'RMPOBJECT_OPEN', (payload: any) => {
-      payload.pName.wsRMPObjectId = name;
-      payload.pType.bType = 1;
+    const response = await this.sendAction(this.pRMRoot, 'RMTOBJECT_OPEN', (payload: any) => {
+      payload.pName.wsRMTObjectId = name;
+      payload.pType.bType = 1; // Root
       payload.pType.bSubtype = 0;
       payload.pType.bFiction = 0;
       payload.pType.bMovable = 0;
@@ -550,11 +550,12 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     });
 
     if (response.nResult !== 0) {
+      console.error(`[createScene] RMTOBJECT_OPEN response:`, JSON.stringify(response));
       throw new Error(`Failed to create scene: error ${response.nResult}`);
     }
 
-    const newId = response.aResultSet?.[0]?.[0]?.twRMPObjectIx?.toString() || Date.now().toString();
-    return { id: newId, name, rootObjectId: newId };
+    const newId = response.aResultSet?.[0]?.[0]?.twRMTObjectIx?.toString() || Date.now().toString();
+    return { id: newId, name, rootObjectId: newId, classId: ClassIds.RMTObject };
   }
 
   async deleteScene(sceneId: string): Promise<void> {
@@ -651,9 +652,21 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       this.objectCache.set(params.parentId, pParent);
     }
 
-    const response = await this.sendAction(pParent, 'RMPOBJECT_OPEN', (payload: any) => {
-      payload.pName.wsRMPObjectId = params.name;
-      payload.pType.bType = 1;
+    const isTerrestrial = params.objectType === 'parcel' || params.objectType === 'terrestrial-root';
+    const actionName = isTerrestrial ? 'RMTOBJECT_OPEN' : 'RMPOBJECT_OPEN';
+    const nameField = isTerrestrial ? 'wsRMTObjectId' : 'wsRMPObjectId';
+    const classId = isTerrestrial ? ClassIds.RMTObject : ClassIds.RMPObject;
+
+    let bType: number;
+    switch (params.objectType) {
+      case 'terrestrial-root': bType = 1; break;
+      case 'parcel': bType = 11; break;
+      default: bType = 0;
+    }
+
+    const response = await this.sendAction(pParent, actionName, (payload: any) => {
+      payload.pName[nameField] = params.name;
+      payload.pType.bType = bType;
       payload.pType.bSubtype = 0;
       payload.pType.bFiction = 0;
       payload.pType.bMovable = 0;
@@ -680,7 +693,8 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       throw new Error(`Failed to create object: error ${response.nResult}`);
     }
 
-    const newId = response.aResultSet?.[0]?.[0]?.twRMPObjectIx?.toString() || Date.now().toString();
+    const resultIdField = isTerrestrial ? 'twRMTObjectIx' : 'twRMPObjectIx';
+    const newId = response.aResultSet?.[0]?.[0]?.[resultIdField]?.toString() || Date.now().toString();
 
     // Re-fetch parent so its nChildren and child list reflect the new child
     if (!params.skipParentRefetch) {
@@ -700,7 +714,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       resource: params.resource ?? null,
       resourceName: params.resourceName ?? null,
       bound: null,
-      classId: ClassIds.RMPObject,
+      classId,
       children: null,
     };
   }
