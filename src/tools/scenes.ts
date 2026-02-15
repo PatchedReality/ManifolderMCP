@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
+import { objectTypeSchema } from './schemas.js';
 import { paginate } from '../output.js';
 import { getProfile } from '../config.js';
 import { handleFabricConnect } from './connection.js';
+import { parseObjectRef } from '../types.js';
 
 const autoConnectParams = {
   profile: z.string().optional().describe('Config profile name (e.g., "earth", "default"). Auto-connects if not already connected.'),
@@ -21,7 +23,7 @@ export const sceneTools = {
   open_scene: {
     description: 'Load a scene and return the object tree summary. Accepts optional profile or url to auto-connect if not already connected.',
     inputSchema: z.object({
-      sceneId: z.string().describe('ID of the scene to open'),
+      sceneId: z.string().describe('ID of the scene to open (e.g., "physical:1", "terrestrial:3")'),
       ...autoConnectParams,
     }),
   },
@@ -29,13 +31,14 @@ export const sceneTools = {
     description: 'Create a new empty scene. Accepts optional profile or url to auto-connect if not already connected.',
     inputSchema: z.object({
       name: z.string().describe('Name for the new scene'),
+      objectType: objectTypeSchema.optional().describe('Object type for the scene root. Examples: "terrestrial:sector", "celestial:planet". Defaults to "physical" when omitted.'),
       ...autoConnectParams,
     }),
   },
   delete_scene: {
     description: 'Delete a scene and all its children. Accepts optional profile or url to auto-connect if not already connected.',
     inputSchema: z.object({
-      sceneId: z.string().describe('ID of the scene to delete'),
+      sceneId: z.string().describe('ID of the scene to delete (e.g., "physical:1", "terrestrial:3")'),
       ...autoConnectParams,
     }),
   },
@@ -84,7 +87,11 @@ export async function handleListScenes(
   const scenes = await client.listScenes();
   const rootUrl = client.getResourceRootUrl();
   const items = scenes.map(s => {
-    const url = rootUrl ? `${rootUrl}/fabric/${s.classId}/${s.id}` : undefined;
+    let url: string | undefined;
+    if (rootUrl) {
+      const { classId, numericId } = parseObjectRef(s.id);
+      url = `${rootUrl}/fabric/${classId}/${numericId}`;
+    }
     return { id: s.id, name: s.name, url };
   });
   return JSON.stringify(paginate(items, args.offset, args.limit));
@@ -117,18 +124,16 @@ export async function handleOpenScene(
 
 export async function handleCreateScene(
   client: MVFabricClient,
-  args: { name: string; profile?: string; url?: string }
+  args: { name: string; objectType?: string; profile?: string; url?: string }
 ): Promise<string> {
   await ensureConnection(client, args);
-  const scene = await client.createScene(args.name);
+  const scene = await client.createScene(args.name, args.objectType);
 
   const rootUrl = client.getResourceRootUrl();
   let url: string | undefined;
   if (rootUrl) {
-    const scenes = await client.listScenes();
-    const created = scenes.find(s => s.id === scene.id);
-    const classId = created?.classId ?? 73;
-    url = `${rootUrl}/fabric/${classId}/${scene.id}`;
+    const { classId, numericId } = parseObjectRef(scene.id);
+    url = `${rootUrl}/fabric/${classId}/${numericId}`;
   }
 
   return JSON.stringify({ scene: { ...scene, url } });

@@ -13,6 +13,32 @@ export const quaternionSchema = z.object({
   w: z.number(),
 });
 
+export const transformFields = {
+  position: vector3Schema.optional(),
+  rotation: quaternionSchema.optional(),
+  scale: vector3Schema.optional(),
+  resource: z.string().optional(),
+  resourceName: z.string().optional(),
+  bound: vector3Schema.optional(),
+};
+
+export const objectTypeSchema = z.enum([
+  // Celestial subtypes (class 71)
+  'celestial:universe', 'celestial:supercluster', 'celestial:galaxy_cluster',
+  'celestial:galaxy', 'celestial:black_hole', 'celestial:nebula',
+  'celestial:star_cluster', 'celestial:constellation', 'celestial:star_system',
+  'celestial:star', 'celestial:planet_system', 'celestial:planet',
+  'celestial:moon', 'celestial:debris', 'celestial:satellite',
+  'celestial:transport', 'celestial:surface',
+  // Terrestrial subtypes (class 72)
+  'terrestrial:root', 'terrestrial:water', 'terrestrial:land',
+  'terrestrial:country', 'terrestrial:territory', 'terrestrial:state',
+  'terrestrial:county', 'terrestrial:city', 'terrestrial:community',
+  'terrestrial:sector', 'terrestrial:parcel',
+  // Physical subtypes (class 73)
+  'physical', 'physical:transport',
+]);
+
 // Action body schemas
 export const pointlightBodySchema = z.object({
   color: z.tuple([z.number(), z.number(), z.number(), z.number()]),

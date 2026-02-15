@@ -1,16 +1,17 @@
 import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
-import { quaternionSchema, vector3Schema } from './schemas.js';
+import type { CreateObjectParams, UpdateObjectParams } from '../types.js';
+import { objectTypeSchema, transformFields, vector3Schema } from './schemas.js';
 import { paginate } from '../output.js';
 
 export const objectTools = {
   list_objects: {
     description: 'List already-loaded objects in a scene (shallow). Objects whose children have not been loaded yet will show childCount: -1. Use get_object to load a specific object and its children, or find_objects to deep-search.',
     inputSchema: z.object({
-      sceneId: z.string().describe('ID of the scene'),
+      scopeId: z.string().describe('Object ID to scope the listing to. Typically a scene root from list_scenes, but can be any object. (e.g., "physical:1", "terrestrial:3")'),
       filter: z.object({
-        namePattern: z.string().optional().describe('Regex pattern to filter by name'),
-        type: z.string().optional().describe('Object type to filter by'),
+        namePattern: z.string().optional().describe('Regex pattern to filter by name (client-side, applied to cached objects)'),
+        type: z.string().optional().describe('Filter by class ("terrestrial") or by class:subtype ("terrestrial:parcel")'),
       }).optional().describe('Optional filter criteria'),
       offset: z.number().optional().describe('Skip first N results (default: 0)'),
       limit: z.number().optional().describe('Max results to return (default: 10)'),
@@ -19,59 +20,46 @@ export const objectTools = {
   get_object: {
     description: 'Get full details of a specific object',
     inputSchema: z.object({
-      objectId: z.string().describe('ID of the object'),
+      objectId: z.string().describe('ID of the object (e.g., "physical:42", "terrestrial:3")'),
     }),
   },
   create_object: {
     description: 'Create a new object in the scene. For regular 3D models, use resource="/objects/Model.glb". For action resources (lights, text, rotators, video), set resource to the action URI and resourceName to the action resource JSON file.',
     inputSchema: z.object({
-      parentId: z.string().describe('ID of the parent object'),
+      parentId: z.string().describe('ID of the parent object (e.g., "physical:123", "terrestrial:3", or "root")'),
       name: z.string().describe('Name for the new object'),
-      position: vector3Schema.optional().describe('Position (default: 0,0,0)'),
-      rotation: quaternionSchema.optional().describe('Rotation quaternion (default: identity)'),
-      scale: vector3Schema.optional().describe('Scale (default: 1,1,1)'),
-      resource: z.string().optional().describe('Resource URL, e.g. "/objects/Model.glb" or an action URI like "action://pointlight"'),
-      resourceName: z.string().optional().describe('Path to the action resource JSON file when using an action URI, e.g. "/objects/my-light.json"'),
-      bound: vector3Schema.optional().describe('Bounding box size (default: 1,1,1)'),
+      ...transformFields,
+      objectType: objectTypeSchema.optional().describe('Object type in "class:subtype" format. Examples: "terrestrial:sector", "terrestrial:parcel", "celestial:planet", "physical:transport". Defaults to "physical" when omitted. Use parentId "root" to create under RMRoot.'),
     }),
   },
   update_object: {
     description: 'Update properties of an existing object',
     inputSchema: z.object({
-      objectId: z.string().describe('ID of the object to update'),
+      objectId: z.string().describe('ID of the object to update (e.g., "physical:42", "terrestrial:3")'),
       name: z.string().optional().describe('New name'),
-      position: vector3Schema.optional().describe('New position'),
-      rotation: quaternionSchema.optional().describe('New rotation'),
-      scale: vector3Schema.optional().describe('New scale'),
-      resource: z.string().optional().describe('New resource URL'),
+      ...transformFields,
     }),
   },
   delete_object: {
-    description: 'Delete an object and its children. Object must be in cache (loaded via get_object or list_objects first).',
+    description: 'Delete an object and its children. The object class is derived from the prefixed ID.',
     inputSchema: z.object({
-      objectId: z.string().describe('ID of the object to delete'),
-    }),
-  },
-  delete_object_unknown_type: {
-    description: 'Delete an object when its type is unknown (not in cache). Queries the server trying multiple object types. Use only when delete_object fails due to object not being in cache.',
-    inputSchema: z.object({
-      objectId: z.string().describe('ID of the object to delete'),
+      objectId: z.string().describe('ID of the object to delete (e.g., "physical:42", "terrestrial:3")'),
     }),
   },
   move_object: {
     description: 'Reparent an object to a new parent',
     inputSchema: z.object({
-      objectId: z.string().describe('ID of the object to move'),
-      newParentId: z.string().describe('ID of the new parent object'),
+      objectId: z.string().describe('ID of the object to move (e.g., "physical:42")'),
+      newParentId: z.string().describe('ID of the new parent object (e.g., "terrestrial:3")'),
     }),
   },
 };
 
 export async function handleListObjects(
   client: MVFabricClient,
-  args: { sceneId: string; filter?: { namePattern?: string; type?: string }; offset?: number; limit?: number }
+  args: { scopeId: string; filter?: { namePattern?: string; type?: string }; offset?: number; limit?: number }
 ): Promise<string> {
-  const objects = await client.listObjects(args.sceneId, args.filter);
+  const objects = await client.listObjects(args.scopeId, args.filter);
   const items = objects.map(obj => ({
     id: obj.id,
     name: obj.name,
@@ -104,16 +92,7 @@ export async function handleGetObject(
 
 export async function handleCreateObject(
   client: MVFabricClient,
-  args: {
-    parentId: string;
-    name: string;
-    position?: { x: number; y: number; z: number };
-    rotation?: { x: number; y: number; z: number; w: number };
-    scale?: { x: number; y: number; z: number };
-    resource?: string;
-    resourceName?: string;
-    bound?: { x: number; y: number; z: number };
-  }
+  args: Omit<CreateObjectParams, 'skipParentRefetch'>
 ): Promise<string> {
   const obj = await client.createObject(args);
   return JSON.stringify({ id: obj.id, name: obj.name, parentId: obj.parentId });
@@ -121,14 +100,7 @@ export async function handleCreateObject(
 
 export async function handleUpdateObject(
   client: MVFabricClient,
-  args: {
-    objectId: string;
-    name?: string;
-    position?: { x: number; y: number; z: number };
-    rotation?: { x: number; y: number; z: number; w: number };
-    scale?: { x: number; y: number; z: number };
-    resource?: string;
-  }
+  args: Omit<UpdateObjectParams, 'skipRefetch'>
 ): Promise<string> {
   const updated: string[] = [];
   if (args.name !== undefined) updated.push('name');
@@ -136,6 +108,8 @@ export async function handleUpdateObject(
   if (args.rotation !== undefined) updated.push('rotation');
   if (args.scale !== undefined) updated.push('scale');
   if (args.resource !== undefined) updated.push('resource');
+  if (args.resourceName !== undefined) updated.push('resourceName');
+  if (args.bound !== undefined) updated.push('bound');
   await client.updateObject(args);
   return JSON.stringify({ id: args.objectId, updated });
 }
@@ -144,15 +118,7 @@ export async function handleDeleteObject(
   client: MVFabricClient,
   args: { objectId: string }
 ): Promise<string> {
-  await client.deleteObject(args.objectId, false);
-  return JSON.stringify({ success: true, deletedObjectId: args.objectId });
-}
-
-export async function handleDeleteObjectUnknownType(
-  client: MVFabricClient,
-  args: { objectId: string }
-): Promise<string> {
-  await client.deleteObject(args.objectId, true);
+  await client.deleteObject(args.objectId);
   return JSON.stringify({ success: true, deletedObjectId: args.objectId });
 }
 

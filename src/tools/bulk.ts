@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
 import type { BulkOperation } from '../types.js';
-import { quaternionSchema, vector3Schema } from './schemas.js';
+import { objectTypeSchema, transformFields, vector3Schema } from './schemas.js';
 import { paginate } from '../output.js';
 
 const operationSchema = z.discriminatedUnion('type', [
@@ -10,12 +10,8 @@ const operationSchema = z.discriminatedUnion('type', [
     params: z.object({
       parentId: z.string(),
       name: z.string(),
-      position: vector3Schema.optional(),
-      rotation: quaternionSchema.optional(),
-      scale: vector3Schema.optional(),
-      resource: z.string().optional(),
-      resourceName: z.string().optional(),
-      bound: vector3Schema.optional(),
+      ...transformFields,
+      objectType: objectTypeSchema.optional(),
     }),
   }),
   z.object({
@@ -23,10 +19,7 @@ const operationSchema = z.discriminatedUnion('type', [
     params: z.object({
       objectId: z.string(),
       name: z.string().optional(),
-      position: vector3Schema.optional(),
-      rotation: quaternionSchema.optional(),
-      scale: vector3Schema.optional(),
-      resource: z.string().optional(),
+      ...transformFields,
     }),
   }),
   z.object({
@@ -46,17 +39,17 @@ const operationSchema = z.discriminatedUnion('type', [
 
 export const bulkTools = {
   bulk_update: {
-    description: 'Execute multiple operations atomically',
+    description: 'Execute multiple operations in a single batch. Operations execute sequentially; failures are collected but do not stop subsequent operations. Operations cannot reference IDs created by earlier operations in the same batch.',
     inputSchema: z.object({
       operations: z.array(operationSchema).describe('Array of operations to execute'),
     }),
   },
   find_objects: {
-    description: 'Search for objects by name pattern, position radius, or resource URL. Uses server-side SEARCH action for name queries (begins-with matching on lowercased text). Falls back to loading the full scene tree for non-text queries.',
+    description: 'Search for objects by name pattern, position radius, or resource URL. Uses server-side SEARCH action for name queries (begins-with matching on lowercased text). Falls back to loading the subtree under the scoped object for non-text queries.',
     inputSchema: z.object({
-      sceneId: z.string().describe('ID of the scene to search'),
+      scopeId: z.string().describe('Object ID to scope the search to. Typically a scene root from list_scenes, but can be any object. (e.g., "physical:1", "terrestrial:3")'),
       query: z.object({
-        namePattern: z.string().optional().describe('Regex pattern to match object names'),
+        namePattern: z.string().optional().describe('Name prefix to search for (begins-with matching, case-insensitive)'),
         positionRadius: z.object({
           center: vector3Schema,
           radius: z.number(),
@@ -85,7 +78,7 @@ export async function handleBulkUpdate(
 export async function handleFindObjects(
   client: MVFabricClient,
   args: {
-    sceneId: string;
+    scopeId: string;
     query: {
       namePattern?: string;
       positionRadius?: { center: { x: number; y: number; z: number }; radius: number };
@@ -95,7 +88,7 @@ export async function handleFindObjects(
     limit?: number;
   }
 ): Promise<string> {
-  const objects = await client.findObjects(args.sceneId, args.query);
+  const objects = await client.findObjects(args.scopeId, args.query);
   const items = objects.map(obj => ({
     id: obj.id,
     name: obj.name,

@@ -34,7 +34,6 @@ import {
   handleCreateObject,
   handleUpdateObject,
   handleDeleteObject,
-  handleDeleteObjectUnknownType,
   handleMoveObject,
   bulkTools,
   handleBulkUpdate,
@@ -203,9 +202,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case 'delete_object':
         result = await handleDeleteObject(client, args as { objectId: string });
-        break;
-      case 'delete_object_unknown_type':
-        result = await handleDeleteObjectUnknownType(client, args as { objectId: string });
         break;
       case 'move_object':
         result = await handleMoveObject(client, args as { objectId: string; newParentId: string });
