@@ -112,11 +112,6 @@ export interface Transform {
   scale: Vector3;
 }
 
-export interface BoundingBox {
-  min: Vector3;
-  max: Vector3;
-}
-
 export interface Orbit {
   period: number;
   start: number;
@@ -139,7 +134,7 @@ export interface FabricObject {
   transform: Transform;
   resourceReference: string | null;
   resourceName: string | null;
-  bound: BoundingBox | null;
+  bound: Vector3 | null;
   classId: number;
   subtype: number;
   children: string[] | null;

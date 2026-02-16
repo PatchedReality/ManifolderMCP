@@ -68,7 +68,7 @@ All should fail with translated error messages.
 
 | # | Action | Expected |
 |---|--------|----------|
-| 5.1 | `get_object(objectId: <3.6>)` | Returns full details: id, name, parentId, position, rotation, scale, resourceReference, childCount, children |
+| 5.1 | `get_object(objectId: <3.6>)` | Returns full details: id, name, parentId, position, rotation, scale, resourceReference, bound, childCount, children |
 | 5.2 | `list_objects(scopeId: <2.3>, limit: 10)` | Lists celestial children under the planet scene |
 | 5.3 | `list_objects(scopeId: <2.3>, filter: {type: "celestial:surface"})` | Only surface objects |
 | 5.4 | `list_objects(scopeId: <2.3>, filter: {namePattern: "Moon"})` | Only the moon |
@@ -87,7 +87,7 @@ Test all updatable fields on the physical object from 3.6.
 | 6.5 | `update_object(objectId: <3.6>, bound: {x:5, y:10, z:5})` | Bound updated |
 | 6.6 | `update_object(objectId: <3.6>, resourceReference: "<url from upload_resource>")` | Resource updated |
 | 6.7 | `update_object(objectId: <3.6>, resourceName: "<url from upload_resource>")` | ResourceName updated |
-| 6.8 | `get_object(objectId: <3.6>)` | Verify all fields reflect updates |
+| 6.8 | `get_object(objectId: <3.6>)` | Verify all fields reflect updates including bound `{x:5, y:10, z:5}` |
 | 6.9 | `update_object(objectId: <3.6>, name: "Building", position: {x:0,y:0,z:0}, rotation: {x:0,y:0,z:0,w:1}, scale: {x:1,y:1,z:1})` | Multiple fields in one call |
 
 ## 6b. Celestial Object Updates

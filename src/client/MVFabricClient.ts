@@ -1328,8 +1328,9 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       resourceReference: rmx.pResource?.sReference || null,
       resourceName: rmx.pResource?.sName || null,
       bound: rmx.pBound ? {
-        min: { x: -rmx.pBound.dX / 2, y: -rmx.pBound.dY / 2, z: -rmx.pBound.dZ / 2 },
-        max: { x: rmx.pBound.dX / 2, y: rmx.pBound.dY / 2, z: rmx.pBound.dZ / 2 },
+        x: rmx.pBound.dX ?? 0,
+        y: rmx.pBound.dY ?? 0,
+        z: rmx.pBound.dZ ?? 0,
       } : null,
       classId: rmx.wClass_Object,
       subtype: rmx.pType?.bType ?? 0,

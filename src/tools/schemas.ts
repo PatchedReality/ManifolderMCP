@@ -19,7 +19,7 @@ export const transformFields = {
   scale: vector3Schema.optional(),
   resourceReference: z.string().optional().describe('Resource URL (maps to pResource.sReference). Use the url from upload_resource or list_resources. For action resources: "action://pointlight"'),
   resourceName: z.string().optional(),
-  bound: vector3Schema.optional(),
+  bound: vector3Schema.optional().describe('Bounding half-extent (radius) in meters. The object extends ±bound from its center on each axis. Examples: Earth = {x:6371000, y:6371000, z:6371000}, a 100m×50m parcel = {x:50, y:10, z:25}'),
 };
 
 export const orbitSchema = z.object({

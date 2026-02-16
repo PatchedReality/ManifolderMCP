@@ -268,10 +268,12 @@ The pivot has no `resourceReference` — it's just a container. The showtext and
 
 ### Parameter Clarifications
 
-**`bound`**: Sets the bounding box size of an object. Use it for:
-- Empty containers (pivots) to define their spatial extent
-- Action resources (rotators, text) that have no inherent geometry
-- Defaults to `{x:1, y:1, z:1}` if omitted
+**`bound`**: Sets the spatial extent of an object, in meters.
+- **X/Z**: Half-extent for all object types. Object spans ±bound from center.
+- **Y**: Full height above ground for terrestrial/physical. Object spans 0 to bound.y.
+- **Y for celestial**: Half-extent (radius), same as X/Z. Spheres are symmetric.
+
+Defaults to `{x:1, y:1, z:1}` if omitted.
 
 **`resourceReference` and `resourceName`**: These map directly to wire protocol fields (`pResource.sReference` and `pResource.sName`). No magic resolution — what you set is what gets stored.
 - **`resourceReference`** → `pResource.sReference`: the URL the renderer uses to fetch the asset. Use the `url` returned by `upload_resource` or `list_resources`. For action resources, use an action URI (`action://pointlight`).

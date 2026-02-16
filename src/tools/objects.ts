@@ -87,6 +87,7 @@ export async function handleGetObject(
     scale: obj.transform.scale,
     resourceReference: obj.resourceReference,
     resourceName: obj.resourceName,
+    bound: obj.bound,
     childCount: obj.children === null ? -1 : obj.children.length,
     children: obj.children,
   };
