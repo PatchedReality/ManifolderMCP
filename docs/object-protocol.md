@@ -111,8 +111,8 @@ The combination produces a wire event like `"RMRoot:rmtobject_open"` or `"RMTObj
 | pType | bFiction | uint8 | Unknown |
 | pOwner | twRPersonaIx | int64 | Owner persona ID |
 | pResource | qwResource | int64 | Numeric resource ID |
-| pResource | sName | string(48) | Resource display name |
-| pResource | sReference | string(128) | Resource URL path (e.g. `/objects/tree.glb`) |
+| pResource | sName | string(48) | Action resource config URL (empty for regular models/images) |
+| pResource | sReference | string(128) | Resource URL — the asset the renderer fetches |
 | pTransform | vPosition (dX, dY, dZ) | double×3 | World position |
 | pTransform | qRotation (dX, dY, dZ, dW) | double×4 | Rotation quaternion |
 | pTransform | vScale (dX, dY, dZ) | double×3 | Scale |
@@ -122,9 +122,9 @@ The combination produces a wire event like `"RMRoot:rmtobject_open"` or `"RMTObj
 
 | Group | Field | Type | Description |
 |---|---|---|---|
-| pOrbit_Spin | tmPeriod | int64 | Orbit period |
-| pOrbit_Spin | tmStart | int64 | Orbit start time |
-| pOrbit_Spin | dA, dB | double×2 | Orbital parameters |
+| pOrbit_Spin | tmPeriod | int64 | Orbit period in 1/64-second ticks (days × 86400 × 64) |
+| pOrbit_Spin | tmStart | int64 | Orbit start time in 1/64-second ticks |
+| pOrbit_Spin | dA, dB | double×2 | Semi-major/semi-minor axis in meters (km × 1000) |
 | pProperties | fMass | float | Mass |
 | pProperties | fGravity | float | Gravity |
 | pProperties | fColor | float | Color |
@@ -174,6 +174,40 @@ Examples:
 - `https://spatial.patchedreality.com/fabric/73/1` — Physical object 1
 - `https://spatial.patchedreality.com/fabric/72/1` — Terrestrial object 1
 
+### Orbital Plane Orientation (Celestial qRotation)
+
+For celestial objects with orbits, the rotation quaternion encodes the orbital plane orientation — not the object's visual spin. The coordinate system is Y-up.
+
+The quaternion is computed from three Keplerian angles:
+
+```
+q = Qy(Ω) × Qx(i) × Qy(ω)
+```
+
+Where:
+- **Ω** (longitude of ascending node) — rotates around Y to set where the orbit crosses the reference plane
+- **i** (inclination) — tilts the orbital plane out of the reference plane (rotation around X)
+- **ω** (argument of perihelion) — rotates within the orbital plane to orient the closest-approach point
+
+For planet systems orbiting a star, the reference plane is the ecliptic. For moons, the reference plane is typically the parent planet's equatorial plane (regular moons) or the ecliptic (irregular moons).
+
+**Quaternion helpers:**
+
+```
+Qx(θ) = { x: sin(θ/2), y: 0, z: 0, w: cos(θ/2) }
+Qy(θ) = { x: 0, y: sin(θ/2), z: 0, w: cos(θ/2) }
+```
+
+**Important:** After computing the quaternion, normalize so `w > 0` — if `w < 0`, negate all four components (`q` and `-q` represent the same rotation, but the renderer uses the sign of `w` for orbit traversal direction).
+
+**Examples from RP1 reference data:**
+
+| Object | i | Ω | ω | Rotation quaternion |
+|---|---|---|---|---|
+| Earth System | 0° | — | 102.9° | (0, 0.782, 0, 0.623) — pure Y rotation |
+| Mercury System | 7.0° | 48.3° | 29.1° | (0.060, 0.625, -0.010, 0.779) |
+| Moon | 5.145° | ~0° | ~0° | (0.045, 0, 0, 0.999) — pure X tilt |
+
 ### Coordinate Systems (Terrestrial pCoord)
 
 | bCoord | Name | Description |
@@ -190,7 +224,7 @@ Default is NUL (3) when no geo-positioning is needed.
 ### rp1-enter (Full Metaverse)
 
 ```
-RMRoot (70/1)
+root
   └─ Universe (celestial:universe)
        └─ Milky Way (celestial:galaxy)
             └─ Solar System (celestial:star_system)
@@ -198,25 +232,25 @@ RMRoot (70/1)
                       └─ Earth (celestial:planet)
                            └─ Earth Surface (celestial:surface)
                                 └─ Earth Attachment Point (terrestrial)
-                                     resource: "earth.msf:metaversal"
+                                     resourceReference: "earth.msf", resourceName: "metaversal"
 ```
 
 ### rp1-earth (Terrestrial Fabric)
 
 ```
-RMRoot (70/1)
-  ├─ Africa (terrestrial, continent)
+root
+  ├─ Africa (terrestrial)
   │    └─ campuses, sectors, parcels...
-  ├─ Asia (terrestrial, continent)
-  ├─ Europe (terrestrial, continent)
-  ├─ North America (terrestrial, continent)
+  ├─ Asia (terrestrial)
+  ├─ Europe (terrestrial)
+  ├─ North America (terrestrial)
   └─ ...
 ```
 
 ### Campus Fabric (e.g., spatial.patchedreality.com)
 
 ```
-RMRoot (70/1)
+root
   ├─ Sector (terrestrial:sector)
   │    └─ Parcel (terrestrial:parcel)
   │         └─ Physical objects (physical)

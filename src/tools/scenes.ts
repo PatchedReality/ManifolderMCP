@@ -112,7 +112,7 @@ export async function handleOpenScene(
     );
     children = childDetails
       .filter((c): c is NonNullable<typeof c> => c !== null)
-      .map(c => ({ id: c.id, name: c.name, hasResource: !!c.resource }));
+      .map(c => ({ id: c.id, name: c.name, hasResource: !!c.resourceReference }));
   }
 
   return JSON.stringify({

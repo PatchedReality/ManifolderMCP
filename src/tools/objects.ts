@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
 import type { CreateObjectParams, UpdateObjectParams } from '../types.js';
-import { objectTypeSchema, transformFields, vector3Schema } from './schemas.js';
+import { objectTypeSchema, transformFields, celestialFields, vector3Schema } from './schemas.js';
 import { paginate } from '../output.js';
 
 export const objectTools = {
@@ -24,11 +24,12 @@ export const objectTools = {
     }),
   },
   create_object: {
-    description: 'Create a new object in the scene. For regular 3D models, use resource="/objects/Model.glb". For action resources (lights, text, rotators, video), set resource to the action URI and resourceName to the action resource JSON file.',
+    description: 'Create a new object in the scene. For regular 3D models, set resourceReference to the url returned by upload_resource or list_resources. For action resources (lights, text, rotators, video), set resourceReference to the action URI and resourceName to the uploaded JSON config url.',
     inputSchema: z.object({
       parentId: z.string().describe('ID of the parent object (e.g., "physical:123", "terrestrial:3", or "root")'),
       name: z.string().describe('Name for the new object'),
       ...transformFields,
+      ...celestialFields,
       objectType: objectTypeSchema.optional().describe('Object type in "class:subtype" format. Examples: "terrestrial:sector", "terrestrial:parcel", "celestial:planet", "physical:transport". Defaults to "physical" when omitted. Use parentId "root" to create under RMRoot.'),
     }),
   },
@@ -38,6 +39,7 @@ export const objectTools = {
       objectId: z.string().describe('ID of the object to update (e.g., "physical:42", "terrestrial:3")'),
       name: z.string().optional().describe('New name'),
       ...transformFields,
+      ...celestialFields,
     }),
   },
   delete_object: {
@@ -65,7 +67,7 @@ export async function handleListObjects(
     name: obj.name,
     parentId: obj.parentId,
     childCount: obj.children === null ? -1 : obj.children.length,
-    hasResource: !!obj.resource,
+    hasResource: !!obj.resourceReference,
   }));
   return JSON.stringify(paginate(items, args.offset, args.limit));
 }
@@ -76,18 +78,21 @@ export async function handleGetObject(
 ): Promise<string> {
   const obj = await client.getObject(args.objectId);
 
-  return JSON.stringify({
+  const result: Record<string, any> = {
     id: obj.id,
     name: obj.name,
     parentId: obj.parentId,
     position: obj.transform.position,
     rotation: obj.transform.rotation,
     scale: obj.transform.scale,
-    resource: obj.resource,
+    resourceReference: obj.resourceReference,
     resourceName: obj.resourceName,
     childCount: obj.children === null ? -1 : obj.children.length,
     children: obj.children,
-  });
+  };
+  if (obj.orbit) result.orbit = obj.orbit;
+  if (obj.properties) result.properties = obj.properties;
+  return JSON.stringify(result);
 }
 
 export async function handleCreateObject(
@@ -107,9 +112,11 @@ export async function handleUpdateObject(
   if (args.position !== undefined) updated.push('position');
   if (args.rotation !== undefined) updated.push('rotation');
   if (args.scale !== undefined) updated.push('scale');
-  if (args.resource !== undefined) updated.push('resource');
+  if (args.resourceReference !== undefined) updated.push('resourceReference');
   if (args.resourceName !== undefined) updated.push('resourceName');
   if (args.bound !== undefined) updated.push('bound');
+  if (args.orbit !== undefined) updated.push('orbit');
+  if (args.properties !== undefined) updated.push('properties');
   await client.updateObject(args);
   return JSON.stringify({ id: args.objectId, updated });
 }

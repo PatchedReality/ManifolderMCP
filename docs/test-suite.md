@@ -31,6 +31,7 @@ Build a complete celestial → terrestrial → physical tree.
 | # | Action | Expected |
 |---|--------|----------|
 | 3.1 | `create_object(parentId: <2.3>, name: "Moon", objectType: "celestial:moon")` | `celestial:N` |
+| 3.1b | `create_object(parentId: <2.3>, name: "Moon2", objectType: "celestial:moon", orbit: {period:27.3, start:0, a:384400, b:383000}, properties: {mass:7.34e22, gravity:1.62, color:0, brightness:0, reflectivity:0})` | Created with orbital data |
 | 3.2 | `create_object(parentId: <3.1>, name: "Surface", objectType: "celestial:surface")` | `celestial:N` |
 | 3.3 | `create_object(parentId: <3.2>, name: "Country", objectType: "terrestrial:country")` | `terrestrial:N` |
 | 3.4 | `create_object(parentId: <3.3>, name: "Sector", objectType: "terrestrial:sector")` | `terrestrial:N` |
@@ -67,7 +68,7 @@ All should fail with translated error messages.
 
 | # | Action | Expected |
 |---|--------|----------|
-| 5.1 | `get_object(objectId: <3.6>)` | Returns full details: id, name, parentId, position, rotation, scale, resource, childCount, children |
+| 5.1 | `get_object(objectId: <3.6>)` | Returns full details: id, name, parentId, position, rotation, scale, resourceReference, childCount, children |
 | 5.2 | `list_objects(scopeId: <2.3>, limit: 10)` | Lists celestial children under the planet scene |
 | 5.3 | `list_objects(scopeId: <2.3>, filter: {type: "celestial:surface"})` | Only surface objects |
 | 5.4 | `list_objects(scopeId: <2.3>, filter: {namePattern: "Moon"})` | Only the moon |
@@ -84,10 +85,21 @@ Test all updatable fields on the physical object from 3.6.
 | 6.3 | `update_object(objectId: <3.6>, rotation: {x:0, y:0.707, z:0, w:0.707})` | Rotation updated |
 | 6.4 | `update_object(objectId: <3.6>, scale: {x:2, y:2, z:2})` | Scale updated |
 | 6.5 | `update_object(objectId: <3.6>, bound: {x:5, y:10, z:5})` | Bound updated |
-| 6.6 | `update_object(objectId: <3.6>, resource: "/objects/Model.glb")` | Resource updated |
-| 6.7 | `update_object(objectId: <3.6>, resourceName: "/objects/config.json")` | ResourceName updated |
+| 6.6 | `update_object(objectId: <3.6>, resourceReference: "<url from upload_resource>")` | Resource updated |
+| 6.7 | `update_object(objectId: <3.6>, resourceName: "<url from upload_resource>")` | ResourceName updated |
 | 6.8 | `get_object(objectId: <3.6>)` | Verify all fields reflect updates |
 | 6.9 | `update_object(objectId: <3.6>, name: "Building", position: {x:0,y:0,z:0}, rotation: {x:0,y:0,z:0,w:1}, scale: {x:1,y:1,z:1})` | Multiple fields in one call |
+
+## 6b. Celestial Object Updates
+
+Test orbit and properties fields on the celestial object from 3.1.
+
+| # | Action | Expected |
+|---|--------|----------|
+| 6b.1 | `update_object(objectId: <3.1>, orbit: {period:27.3, start:0, a:384400, b:383000})` | Orbit updated |
+| 6b.2 | `update_object(objectId: <3.1>, properties: {mass:7.34e22, gravity:1.62, color:0.8, brightness:0.1, reflectivity:0.12})` | Properties updated |
+| 6b.3 | `get_object(objectId: <3.1>)` | Response includes orbit and properties fields with correct values |
+| 6b.4 | `update_object(objectId: <3.1>, orbit: {period:0, start:0, a:0, b:0}, properties: {mass:0, gravity:0, color:0, brightness:0, reflectivity:0})` | Both updated in one call |
 
 ## 7. Move Object
 

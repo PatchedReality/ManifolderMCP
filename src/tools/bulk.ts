@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { MVFabricClient } from '../client/MVFabricClient.js';
 import type { BulkOperation } from '../types.js';
-import { objectTypeSchema, transformFields, vector3Schema } from './schemas.js';
+import { objectTypeSchema, transformFields, celestialFields, vector3Schema } from './schemas.js';
 import { paginate } from '../output.js';
 
 const operationSchema = z.discriminatedUnion('type', [
@@ -11,6 +11,7 @@ const operationSchema = z.discriminatedUnion('type', [
       parentId: z.string(),
       name: z.string(),
       ...transformFields,
+      ...celestialFields,
       objectType: objectTypeSchema.optional(),
     }),
   }),
@@ -20,6 +21,7 @@ const operationSchema = z.discriminatedUnion('type', [
       objectId: z.string(),
       name: z.string().optional(),
       ...transformFields,
+      ...celestialFields,
     }),
   }),
   z.object({
@@ -93,7 +95,7 @@ export async function handleFindObjects(
     id: obj.id,
     name: obj.name,
     position: obj.transform.position,
-    resource: obj.resource,
+    resourceReference: obj.resourceReference,
   }));
   return JSON.stringify(paginate(items, args.offset, args.limit));
 }

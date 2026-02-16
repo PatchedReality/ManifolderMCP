@@ -75,7 +75,7 @@ export function getFullActionResourceSchema(): string {
     },
     notes: [
       'All action resources share the common header: { type: "DATA" }',
-      'Use upload_resource to upload the JSON file, then create_object with the action URI (e.g. resource: "action://pointlight") and resourceName: "/objects/my-light.json"',
+      'Use upload_resource to upload the JSON file, then create_object with the action URI (e.g. resourceReference: "action://pointlight") and resourceName set to the url returned by upload_resource',
     ],
   }, null, 2);
 }

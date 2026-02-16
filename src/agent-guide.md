@@ -60,19 +60,19 @@ Not all object types can be nested freely. The parent's class determines which c
 
 ### Creating Objects
 
-**3D model:**
+**3D model** (use the `url` returned by `upload_resource` or `list_resources`):
 ```
-create_object(parentId: "terrestrial:3", name: "Tree", resource: "/objects/Tree.glb")
+create_object(parentId: "terrestrial:3", name: "Tree", resourceReference: "<url from upload_resource>")
 ```
 
-**Empty container** (no `resource`, used for grouping/pivots):
+**Empty container** (no `resourceReference`, used for grouping/pivots):
 ```
 create_object(parentId: "terrestrial:3", name: "Group", position: {x:0, y:5, z:0})
 ```
 
 **Action resource** (lights, text, rotators, video):
 ```
-create_object(parentId: "physical:123", name: "Light", resource: "action://pointlight", resourceName: "/objects/my-light.json")
+create_object(parentId: "physical:123", name: "Light", resourceReference: "action://pointlight", resourceName: "<url from upload_resource>")
 ```
 
 **Terrestrial sector** (under root):
@@ -85,15 +85,27 @@ create_object(parentId: "root", name: "My Sector", objectType: "terrestrial:sect
 create_object(parentId: "terrestrial:3", name: "My Parcel", objectType: "terrestrial:parcel")
 ```
 
+**Celestial with orbital data:**
+
+Orbit units: `period` is in 1/64-second ticks (days × 5,529,600), `a`/`b` are semi-major/semi-minor axis in meters (km × 1,000). Compute `b = a × sqrt(1 - e²)` from eccentricity.
+
+The `rotation` quaternion on a celestial object with an orbit sets the **orbital plane orientation**, not visual spin. Compute it from Keplerian elements using `q = Qy(Ω) × Qx(i) × Qy(ω)` where Ω is longitude of ascending node, i is inclination, ω is argument of perihelion. The coordinate system is Y-up. Quaternion helpers: `Qx(θ) = {x: sin(θ/2), y: 0, z: 0, w: cos(θ/2)}`, `Qy(θ) = {x: 0, y: sin(θ/2), z: 0, w: cos(θ/2)}`. Multiply quaternions in order: first Qy(Ω), then Qx(i), then Qy(ω). After computing the quaternion, normalize so `w > 0` — if `w < 0`, negate all four components. The renderer uses the sign of `w` for orbit traversal direction, and `w < 0` produces a mirrored orbit.
+
+```
+create_object(parentId: "celestial:3", name: "Earth System", objectType: "celestial:planet_system", orbit: {period: 2019699258, start: 0, a: 149598023000, b: 149577131000}, rotation: {x: 0, y: 0.782, z: 0, w: 0.623}, properties: {mass: 5.97e24, gravity: 9.81, color: 0, brightness: 0, reflectivity: 0.367})
+```
+
 ### Updating Objects
 
 ```
 update_object(objectId: "physical:42", position: {x:10, y:0, z:5})
 update_object(objectId: "physical:42", name: "New Name", scale: {x:2, y:2, z:2})
-update_object(objectId: "terrestrial:3", resource: "/objects/NewModel.glb")
+update_object(objectId: "terrestrial:3", resourceReference: "<url from list_resources>")
+update_object(objectId: "celestial:5", orbit: {period: 2019699258, start: 0, a: 149598023000, b: 149577131000}, rotation: {x: 0, y: 0.782, z: 0, w: 0.623})
+update_object(objectId: "celestial:5", properties: {mass: 5.97e24, gravity: 9.81, color: 0, brightness: 0, reflectivity: 0.367})
 ```
 
-You can update `name`, `position`, `rotation`, `scale`, `resource`, `resourceName`, and `bound` — any combination in one call. `objectType` is set at creation time only.
+You can update `name`, `position`, `rotation`, `scale`, `resourceReference`, `resourceName`, `bound`, `orbit`, and `properties` — any combination in one call. `objectType` is set at creation time only. `orbit` and `properties` only apply to celestial objects.
 
 ### Deleting Objects
 
@@ -114,7 +126,7 @@ Reparents the object under a new parent.
 
 ### Inspecting Objects
 
-- `get_object(objectId: "physical:42")` — returns full details: id, name, parentId, position, resource, children
+- `get_object(objectId: "physical:42")` — returns full details: id, name, parentId, position, resourceReference, children
 - `list_objects(scopeId: "physical:1")` — shallow list of loaded objects under the scoped object. Supports optional `filter` with `namePattern` (regex) and `type`. `scopeId` is typically a scene root from `list_scenes`, but can be any object.
 - `childCount: -1` means the object's children haven't been loaded from the server yet. Call `get_object` on it to load its children. After that, its children will appear in `list_objects`.
 
@@ -145,7 +157,9 @@ Resources are files on the server: 3D models (.glb), images (.png, .jpg), or act
 
 ### Resource URLs
 
-- Relative URLs (`/objects/Model.glb`) resolve against the fabric host
+Resource URLs for `resourceReference` should come from the resource tools — `upload_resource` and `list_resources` both return a `url` field with the correct path for the server's configuration. Use that URL directly as `resourceReference`.
+
+- Relative URLs resolve against the fabric host
 - Absolute URLs (`https://cdn.example.com/Model.glb`) used as-is
 - Action URIs (`action://pointlight`) reference built-in action types
 
@@ -195,7 +209,7 @@ Action resources are JSON files that define functional content — lights, text,
 2. **Create a JSON file** locally with the action definition
 3. **Validate**: `validate_action_resource(localPath: "...", type: "pointlight")`
 4. **Upload**: `upload_resource(localPath: "...")`
-5. **Attach to an object**: `create_object` with `resource: "action://pointlight"` and `resourceName: "/objects/my-light.json"`
+5. **Attach to an object**: `create_object` with `resourceReference: "action://pointlight"` and `resourceName` set to the `url` returned by `upload_resource`
 
 ### JSON Structure
 
@@ -223,29 +237,34 @@ All action resources share this format:
 
 Rotators rotate their **parent container**. To make objects spin, use the pivot pattern:
 
-1. Create an **empty pivot container** (no `resource`)
+1. Create an **empty pivot container** (no `resourceReference`)
 2. Place visual elements as **children** of the pivot
 3. Place the **rotator** as a **sibling** of the visual elements (also a child of the pivot)
 4. The rotator spins the pivot, which spins all its children together
 
 **Example: Rotating label above a tree (MCP tool calls):**
 ```
-// 1. Tree at scene root
-create_object(parentId: "terrestrial:3", name: "Tree", resource: "/objects/Tree.glb")
+// 1. Upload resources first
+upload_resource(localPath: "Tree.glb")       // returns { url: "<tree-url>" }
+upload_resource(localPath: "my-label.json")  // returns { url: "<label-url>" }
+upload_resource(localPath: "my-rotator.json") // returns { url: "<rotator-url>" }
+
+// 2. Tree at scene root
+create_object(parentId: "terrestrial:3", name: "Tree", resourceReference: "<tree-url>")
 // returns { id: "physical:100" }
 
-// 2. Empty pivot container above the tree
+// 3. Empty pivot container above the tree
 create_object(parentId: "terrestrial:3", name: "label-pivot", position: {x:0, y:15, z:0}, bound: {x:3, y:3, z:3})
 // returns { id: "physical:101" }
 
-// 3. Text label as child of pivot
-create_object(parentId: "physical:101", name: "Label", resource: "action://showtext", resourceName: "/objects/my-label.json", scale: {x:1.5, y:1.5, z:1.5})
+// 4. Text label as child of pivot
+create_object(parentId: "physical:101", name: "Label", resourceReference: "action://showtext", resourceName: "<label-url>", scale: {x:1.5, y:1.5, z:1.5})
 
-// 4. Rotator as sibling of label (also child of pivot)
-create_object(parentId: "physical:101", name: "Rotator", resource: "action://rotator", resourceName: "/objects/my-rotator.json", bound: {x:1, y:1, z:1})
+// 5. Rotator as sibling of label (also child of pivot)
+create_object(parentId: "physical:101", name: "Rotator", resourceReference: "action://rotator", resourceName: "<rotator-url>", bound: {x:1, y:1, z:1})
 ```
 
-The pivot has no `resource` — it's just a container. The showtext and rotator are siblings inside the pivot. The rotator spins the pivot, which spins the label.
+The pivot has no `resourceReference` — it's just a container. The showtext and rotator are siblings inside the pivot. The rotator spins the pivot, which spins the label.
 
 ### Parameter Clarifications
 
@@ -254,9 +273,11 @@ The pivot has no `resource` — it's just a container. The showtext and rotator 
 - Action resources (rotators, text) that have no inherent geometry
 - Defaults to `{x:1, y:1, z:1}` if omitted
 
-**`resourceName`**: Its meaning depends on context:
-- **With an action `resource`** (e.g., `resource: "action://pointlight"`): path to the action's JSON config file on the server (e.g., `"/objects/my-light.json"`)
-- If `resource` is omitted, `resourceName` is ignored and the object is an empty container
+**`resourceReference` and `resourceName`**: These map directly to wire protocol fields (`pResource.sReference` and `pResource.sName`). No magic resolution — what you set is what gets stored.
+- **`resourceReference`** → `pResource.sReference`: the URL the renderer uses to fetch the asset. Use the `url` returned by `upload_resource` or `list_resources`. For action resources, use an action URI (`action://pointlight`).
+- **`resourceName`** → `pResource.sName`: used only for action resources. Contains the URL of the action's JSON config file (the `url` from uploading the JSON). Leave empty/unset for regular 3D models and images.
+- **For 3D models / images**: set only `resourceReference` with the URL from the resource tools.
+- **For action resources**: set both — `resourceReference: "action://pointlight"` (action URI) and `resourceName` with the uploaded JSON config URL.
 
 ## Bulk Operations
 
@@ -266,7 +287,7 @@ The pivot has no `resource` — it's just a container. The showtext and rotator 
 
 ```
 bulk_update(operations: [
-  { type: "create", params: { parentId: "terrestrial:3", name: "Obj1", resource: "/objects/Model.glb" } },
+  { type: "create", params: { parentId: "terrestrial:3", name: "Obj1", resourceReference: "<url from upload_resource>" } },
   { type: "update", params: { objectId: "physical:42", position: {x:10, y:0, z:0} } },
   { type: "delete", params: { objectId: "physical:99" } },
   { type: "move",   params: { objectId: "physical:50", newParentId: "terrestrial:3" } }
@@ -328,9 +349,9 @@ Fabric scenes and resource libraries can be large — hundreds of objects per sc
 Key response shapes by tool:
 
 - `create_object` → `{ id, name, parentId }`
-- `get_object` → `{ id, name, parentId, position, rotation, scale, resource, resourceName, childCount, children }`
+- `get_object` → `{ id, name, parentId, position, rotation, scale, resourceReference, resourceName, childCount, children, orbit?, properties? }` (orbit and properties included for celestial objects)
 - `list_objects` items → `{ id, name, parentId, childCount, hasResource }`
-- `find_objects` items → `{ id, name, position, resource }`
+- `find_objects` items → `{ id, name, position, resourceReference }`
 - `open_scene` → `{ sceneId, root: { id, name, childCount }, children: [{ id, name, hasResource }] }`
 - `list_scenes` items → `{ id, name, url }`
 - All paginated tools → `{ total, offset, limit, items }`

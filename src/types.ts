@@ -117,17 +117,34 @@ export interface BoundingBox {
   max: Vector3;
 }
 
+export interface Orbit {
+  period: number;
+  start: number;
+  a: number;
+  b: number;
+}
+
+export interface CelestialProperties {
+  mass: number;
+  gravity: number;
+  color: number;
+  brightness: number;
+  reflectivity: number;
+}
+
 export interface FabricObject {
   id: string;
   parentId: string | null;
   name: string;
   transform: Transform;
-  resource: string | null;
+  resourceReference: string | null;
   resourceName: string | null;
   bound: BoundingBox | null;
   classId: number;
   subtype: number;
   children: string[] | null;
+  orbit?: Orbit | null;
+  properties?: CelestialProperties | null;
 }
 
 export interface Scene {
@@ -154,10 +171,12 @@ export interface CreateObjectParams {
   position?: Vector3;
   rotation?: Quaternion;
   scale?: Vector3;
-  resource?: string;
+  resourceReference?: string;
   resourceName?: string;
   bound?: Vector3;
   objectType?: string;
+  orbit?: Orbit;
+  properties?: CelestialProperties;
   skipParentRefetch?: boolean;
 }
 
@@ -167,9 +186,11 @@ export interface UpdateObjectParams {
   position?: Vector3;
   rotation?: Quaternion;
   scale?: Vector3;
-  resource?: string;
+  resourceReference?: string;
   resourceName?: string;
   bound?: Vector3;
+  orbit?: Orbit;
+  properties?: CelestialProperties;
   skipRefetch?: boolean;
 }
 

@@ -17,9 +17,29 @@ export const transformFields = {
   position: vector3Schema.optional(),
   rotation: quaternionSchema.optional(),
   scale: vector3Schema.optional(),
-  resource: z.string().optional(),
+  resourceReference: z.string().optional().describe('Resource URL (maps to pResource.sReference). Use the url from upload_resource or list_resources. For action resources: "action://pointlight"'),
   resourceName: z.string().optional(),
   bound: vector3Schema.optional(),
+};
+
+export const orbitSchema = z.object({
+  period: z.number().describe('Orbit period in 1/64-second ticks (days × 86400 × 64 = days × 5529600)'),
+  start: z.number().describe('Orbit start time in 1/64-second ticks'),
+  a: z.number().describe('Semi-major axis in meters (km × 1000)'),
+  b: z.number().describe('Semi-minor axis in meters (km × 1000). b = a × sqrt(1 - e²)'),
+}).optional();
+
+export const celestialPropertiesSchema = z.object({
+  mass: z.number(),
+  gravity: z.number(),
+  color: z.number(),
+  brightness: z.number(),
+  reflectivity: z.number(),
+}).optional();
+
+export const celestialFields = {
+  orbit: orbitSchema,
+  properties: celestialPropertiesSchema,
 };
 
 export const objectTypeSchema = z.enum([

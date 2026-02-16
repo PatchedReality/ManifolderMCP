@@ -633,7 +633,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       payload.pOwner.twRPersonaIx = 1;
       payload.pResource.qwResource = 0;
       payload.pResource.sName = params.resourceName || '';
-      payload.pResource.sReference = params.resource || '';
+      payload.pResource.sReference = params.resourceReference || '';
       payload.pTransform.vPosition.dX = params.position?.x ?? 0;
       payload.pTransform.vPosition.dY = params.position?.y ?? 0;
       payload.pTransform.vPosition.dZ = params.position?.z ?? 0;
@@ -658,15 +658,15 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
         payload.pCoord.dC = 0;
       }
       if (isCelestial) {
-        payload.pOrbit_Spin.tmPeriod = 0;
-        payload.pOrbit_Spin.tmStart = 0;
-        payload.pOrbit_Spin.dA = 0;
-        payload.pOrbit_Spin.dB = 0;
-        payload.pProperties.fMass = 0;
-        payload.pProperties.fGravity = 0;
-        payload.pProperties.fColor = 0;
-        payload.pProperties.fBrightness = 0;
-        payload.pProperties.fReflectivity = 0;
+        payload.pOrbit_Spin.tmPeriod = params.orbit?.period ?? 0;
+        payload.pOrbit_Spin.tmStart = params.orbit?.start ?? 0;
+        payload.pOrbit_Spin.dA = params.orbit?.a ?? 0;
+        payload.pOrbit_Spin.dB = params.orbit?.b ?? 0;
+        payload.pProperties.fMass = params.properties?.mass ?? 0;
+        payload.pProperties.fGravity = params.properties?.gravity ?? 0;
+        payload.pProperties.fColor = params.properties?.color ?? 0;
+        payload.pProperties.fBrightness = params.properties?.brightness ?? 0;
+        payload.pProperties.fReflectivity = params.properties?.reflectivity ?? 0;
       }
     });
 
@@ -696,12 +696,14 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
         rotation: params.rotation ?? { x: 0, y: 0, z: 0, w: 1 },
         scale: params.scale ?? { x: 1, y: 1, z: 1 },
       },
-      resource: params.resource ?? null,
+      resourceReference: params.resourceReference ?? null,
       resourceName: params.resourceName ?? null,
       bound: null,
       classId: childClassId,
       subtype: bType,
       children: null,
+      orbit: isCelestial ? params.orbit ?? undefined : undefined,
+      properties: isCelestial ? params.properties ?? undefined : undefined,
     };
   }
 
@@ -748,20 +750,14 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
 
     }
 
-    if (params.resource !== undefined || params.resourceName !== undefined) {
-      let sReference = params.resource ?? pObject.pResource?.sReference ?? '';
-      let sName = params.resourceName ?? '';
-      if (params.resource !== undefined && params.resourceName === undefined) {
-        // Parse colon-separated resource:name format as fallback
-        const colonIndex = params.resource.indexOf(':', params.resource.indexOf('://') + 3);
-        if (colonIndex > 0) {
-          sReference = params.resource.substring(0, colonIndex);
-          sName = params.resource.substring(colonIndex + 1);
-        }
-      }
+    if (params.resourceReference !== undefined || params.resourceName !== undefined) {
       const response = await this.sendAction(pObject, 'RESOURCE', (payload: any) => {
-        payload.pResource.sReference = sReference;
-        payload.pResource.sName = sName;
+        payload.pResource.sReference = params.resourceReference !== undefined
+          ? params.resourceReference
+          : (pObject.pResource?.sReference ?? '');
+        payload.pResource.sName = params.resourceName !== undefined
+          ? params.resourceName
+          : (pObject.pResource?.sName ?? '');
       });
       if (response.nResult !== 0) {
         throw new Error(this.formatResponseError('Failed to update resource', response));
@@ -779,12 +775,40 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       }
     }
 
+    if (params.orbit !== undefined) {
+      // IO transport registers this as 'ORBIT_SPIN', SB transport as 'ORBIT'
+      const orbitAction = pObject.Request('ORBIT_SPIN') ? 'ORBIT_SPIN' : 'ORBIT';
+      const response = await this.sendAction(pObject, orbitAction, (payload: any) => {
+        payload.pOrbit_Spin.tmPeriod = params.orbit!.period;
+        payload.pOrbit_Spin.tmStart = params.orbit!.start;
+        payload.pOrbit_Spin.dA = params.orbit!.a;
+        payload.pOrbit_Spin.dB = params.orbit!.b;
+      });
+      if (response.nResult !== 0) {
+        throw new Error(this.formatResponseError('Failed to update orbit', response));
+      }
+    }
+
+    if (params.properties !== undefined) {
+      const response = await this.sendAction(pObject, 'PROPERTIES', (payload: any) => {
+        payload.pProperties.fMass = params.properties!.mass;
+        payload.pProperties.fGravity = params.properties!.gravity;
+        payload.pProperties.fColor = params.properties!.color;
+        payload.pProperties.fBrightness = params.properties!.brightness;
+        payload.pProperties.fReflectivity = params.properties!.reflectivity;
+      });
+      if (response.nResult !== 0) {
+        throw new Error(this.formatResponseError('Failed to update properties', response));
+      }
+    }
+
     // Invalidate cache so the next read re-fetches confirmed server state
     this.objectCache.delete(params.objectId);
     if (params.skipRefetch) {
       const parentPrefixedId = pObject.twParentIx && pObject.wClass_Parent
         ? formatObjectRef(pObject.wClass_Parent, pObject.twParentIx)
         : null;
+      const isCelestial = pObject.wClass_Object === 71;
       return {
         id: params.objectId,
         parentId: parentPrefixedId,
@@ -794,12 +818,25 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
           rotation: params.rotation ?? { x: pObject.pTransform?.qRotation?.dX ?? 0, y: pObject.pTransform?.qRotation?.dY ?? 0, z: pObject.pTransform?.qRotation?.dZ ?? 0, w: pObject.pTransform?.qRotation?.dW ?? 1 },
           scale: params.scale ?? { x: pObject.pTransform?.vScale?.dX ?? 1, y: pObject.pTransform?.vScale?.dY ?? 1, z: pObject.pTransform?.vScale?.dZ ?? 1 },
         },
-        resource: params.resource ?? pObject.pResource?.sReference ?? null,
-        resourceName: pObject.pResource?.sName ?? null,
+        resourceReference: params.resourceReference ?? pObject.pResource?.sReference ?? null,
+        resourceName: params.resourceName ?? pObject.pResource?.sName ?? null,
         bound: null,
         classId: pObject.wClass_Object,
         subtype: pObject.pType?.bType ?? 0,
         children: null,
+        orbit: isCelestial && pObject.pOrbit_Spin ? {
+          period: params.orbit?.period ?? pObject.pOrbit_Spin.tmPeriod ?? 0,
+          start: params.orbit?.start ?? pObject.pOrbit_Spin.tmStart ?? 0,
+          a: params.orbit?.a ?? pObject.pOrbit_Spin.dA ?? 0,
+          b: params.orbit?.b ?? pObject.pOrbit_Spin.dB ?? 0,
+        } : undefined,
+        properties: isCelestial && pObject.pProperties ? {
+          mass: params.properties?.mass ?? pObject.pProperties.fMass ?? 0,
+          gravity: params.properties?.gravity ?? pObject.pProperties.fGravity ?? 0,
+          color: params.properties?.color ?? pObject.pProperties.fColor ?? 0,
+          brightness: params.properties?.brightness ?? pObject.pProperties.fBrightness ?? 0,
+          reflectivity: params.properties?.reflectivity ?? pObject.pProperties.fReflectivity ?? 0,
+        } : undefined,
       };
     }
     return this.getObject(params.objectId);
@@ -892,8 +929,8 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
           rotation: { x: pObject.pTransform?.qRotation?.dX ?? 0, y: pObject.pTransform?.qRotation?.dY ?? 0, z: pObject.pTransform?.qRotation?.dZ ?? 0, w: pObject.pTransform?.qRotation?.dW ?? 1 },
           scale: { x: pObject.pTransform?.vScale?.dX ?? 1, y: pObject.pTransform?.vScale?.dY ?? 1, z: pObject.pTransform?.vScale?.dZ ?? 1 },
         },
-        resource: pObject.pResource?.sReference ?? null,
-        resourceName: pObject.pResource?.sName ?? null,
+        resourceReference: pObject.pResource?.sReference || null,
+        resourceName: pObject.pResource?.sName || null,
         bound: null,
         classId: pObject.wClass_Object,
         subtype: pObject.pType?.bType ?? 0,
@@ -1071,7 +1108,7 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     // Fall back to client-side filtering for non-text queries
     const allObjects = await this.loadFullTree(scopeId);
     return allObjects.filter(obj => {
-      if (query.resourceUrl && obj.resource !== query.resourceUrl) return false;
+      if (query.resourceUrl && obj.resourceReference !== query.resourceUrl) return false;
       if (query.positionRadius) {
         const { center, radius } = query.positionRadius;
         const pos = obj.transform.position;
@@ -1288,10 +1325,8 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
           z: rmx.pTransform?.vScale?.dZ ?? 1,
         },
       },
-      resource: rmx.pResource?.sReference
-        ? (rmx.pResource.sName ? `${rmx.pResource.sReference}:${rmx.pResource.sName}` : rmx.pResource.sReference)
-        : null,
-      resourceName: rmx.pResource?.sName ?? null,
+      resourceReference: rmx.pResource?.sReference || null,
+      resourceName: rmx.pResource?.sName || null,
       bound: rmx.pBound ? {
         min: { x: -rmx.pBound.dX / 2, y: -rmx.pBound.dY / 2, z: -rmx.pBound.dZ / 2 },
         max: { x: rmx.pBound.dX / 2, y: rmx.pBound.dY / 2, z: rmx.pBound.dZ / 2 },
@@ -1299,6 +1334,19 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       classId: rmx.wClass_Object,
       subtype: rmx.pType?.bType ?? 0,
       children,
+      orbit: rmx.wClass_Object === 71 && rmx.pOrbit_Spin ? {
+        period: rmx.pOrbit_Spin.tmPeriod ?? 0,
+        start: rmx.pOrbit_Spin.tmStart ?? 0,
+        a: rmx.pOrbit_Spin.dA ?? 0,
+        b: rmx.pOrbit_Spin.dB ?? 0,
+      } : undefined,
+      properties: rmx.wClass_Object === 71 && rmx.pProperties ? {
+        mass: rmx.pProperties.fMass ?? 0,
+        gravity: rmx.pProperties.fGravity ?? 0,
+        color: rmx.pProperties.fColor ?? 0,
+        brightness: rmx.pProperties.fBrightness ?? 0,
+        reflectivity: rmx.pProperties.fReflectivity ?? 0,
+      } : undefined,
     };
   }
 
@@ -1306,16 +1354,4 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     return this.pFabric?.pMSFConfig?.map?.sRootUrl || '';
   }
 
-  resolveResourceName(resourceName: string | null): string | null {
-    if (!resourceName) return null;
-
-    if (resourceName.startsWith('http://') || resourceName.startsWith('https://')) {
-      return resourceName;
-    }
-
-    const rootUrl = this.getResourceRootUrl();
-    if (!rootUrl) return null;
-
-    return new URL(resourceName, rootUrl).href;
-  }
 }
