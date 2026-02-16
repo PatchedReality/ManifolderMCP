@@ -101,6 +101,19 @@ Test orbit and properties fields on the celestial object from 3.1.
 | 6b.3 | `get_object(objectId: <3.1>)` | Response includes orbit and properties fields with correct values |
 | 6b.4 | `update_object(objectId: <3.1>, orbit: {period:0, start:0, a:0, b:0}, properties: {mass:0, gravity:0, color:0, brightness:0, reflectivity:0})` | Both updated in one call |
 
+## 6c. Terrestrial Object Updates
+
+Test position/rotation/scale on terrestrial objects to verify pCoord handling. Without the bCoord=3 (NUL) fix, the default bCoord=0 (GEO) with dC=0 fails server-side geo validation and the transform silently fails.
+
+| # | Action | Expected |
+|---|--------|----------|
+| 6c.1 | `update_object(objectId: <3.3>, position: {x:100, y:50, z:25})` | Position updated |
+| 6c.2 | `get_object(objectId: <3.3>)` | Position reflects {x:100, y:50, z:25} |
+| 6c.3 | `update_object(objectId: <3.3>, rotation: {x:0, y:0.707, z:0, w:0.707})` | Rotation updated |
+| 6c.4 | `update_object(objectId: <3.5>, position: {x:10, y:0, z:10}, scale: {x:2, y:2, z:2})` | Multiple fields on parcel |
+| 6c.5 | `get_object(objectId: <3.5>)` | Position and scale reflect updates |
+| 6c.6 | `update_object(objectId: <3.3>, position: {x:0, y:0, z:0}, rotation: {x:0, y:0, z:0, w:1}, scale: {x:1, y:1, z:1})` | Reset to defaults |
+
 ## 7. Move Object
 
 | # | Action | Expected |

@@ -14,7 +14,6 @@ console.log = (...args) => console.error(...args);
 import './MVMF.js';
 import './MVSB.js';
 import './MVIO.js';
-import './MVXP.js';
 import './MVRP.js';
 import './MVRest.js';
 import './MVRP_Dev.js';

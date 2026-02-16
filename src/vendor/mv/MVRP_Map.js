@@ -15,7 +15,7 @@ require ('@metaversalcorp/mvrest');
 require ('@metaversalcorp/mvio');
 */
 
-MV.MVRP.Map = MV.Library ('MVRP_Map', 'Copyright 2014-2024 Metaversal Corporation. All rights reserved.', 'Metaversal RP1 Map', '0.23.11');
+MV.MVRP.Map = MV.Library ('MVRP_Map', 'Copyright 2014-2024 Metaversal Corporation. All rights reserved.', 'Metaversal RP1 Map', '0.23.13');
 
 MV.MVRP.Map.Class.RMCOMMON_TYPE = class extends MV.MVMF.Class.BASE
 {

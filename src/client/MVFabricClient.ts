@@ -743,6 +743,12 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
         payload.pTransform.vScale.dX = params.scale?.x ?? pObject.pTransform?.vScale?.dX ?? 1;
         payload.pTransform.vScale.dY = params.scale?.y ?? pObject.pTransform?.vScale?.dY ?? 1;
         payload.pTransform.vScale.dZ = params.scale?.z ?? pObject.pTransform?.vScale?.dZ ?? 1;
+        if (classId === ClassIds.RMTObject) {
+          payload.pCoord.bCoord = 3;
+          payload.pCoord.dA = 0;
+          payload.pCoord.dB = 0;
+          payload.pCoord.dC = 0;
+        }
       });
       if (response.nResult !== 0) {
         throw new Error(this.formatResponseError('Failed to update transform', response));

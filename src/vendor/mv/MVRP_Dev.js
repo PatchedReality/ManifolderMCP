@@ -1,3 +1,4 @@
+const MV = globalThis.MV;
 
 /*
 import { MV   } from '@metaversalcorp/mvmf';
@@ -5,7 +6,6 @@ import '@metaversalcorp/mvrp';
 import '@metaversalcorp/mvio';
 import '@metaversalcorp/mvrest';
 */
-const MV = globalThis.MV;
 /*
 const { MV } = require ('@metaversalcorp/mvmf');
 require ('@metaversalcorp/mvrp');
