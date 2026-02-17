@@ -13,8 +13,6 @@ SRC="${1:-$PROJECT_DIR/../../RP1/SceneAssembler}"
 SRC_MV="$SRC/site/js/vendor/mv"
 DST_MV="$PROJECT_DIR/src/vendor/mv"
 
-FILES=(MVMF.js MVSB.js MVIO.js MVRP.js MVRest.js MVRP_Dev.js MVRP_Map.js)
-
 if [ ! -d "$SRC_MV" ]; then
   echo "Error: Source directory not found: $SRC_MV"
   exit 1
@@ -24,14 +22,11 @@ echo "Syncing from: $SRC_MV"
 echo "         to:  $DST_MV"
 echo ""
 
-for file in "${FILES[@]}"; do
-  src_file="$SRC_MV/$file"
+for src_file in "$SRC_MV"/MV*.js; do
+  # Skip minified files
+  [[ "$src_file" == *.min.js ]] && continue
+  file="$(basename "$src_file")"
   dst_file="$DST_MV/$file"
-
-  if [ ! -f "$src_file" ]; then
-    echo "  SKIP  $file (not found in source)"
-    continue
-  fi
 
   cp "$src_file" "$dst_file"
 
@@ -55,14 +50,11 @@ echo ""
 
 # Print version summary
 echo "Versions:"
-for file in "${FILES[@]}"; do
-  dst_file="$DST_MV/$file"
-  if [ -f "$dst_file" ]; then
-    basename="${file%.js}"
-    ver=$(grep -oE "'[0-9]+\.[0-9]+\.[0-9]+'" "$dst_file" | head -1 | tr -d "'" || true)
-    if [ -n "$ver" ]; then
-      echo "  $basename $ver"
-    fi
+for dst_file in "$DST_MV"/MV*.js; do
+  name="$(basename "${dst_file%.js}")"
+  ver=$(grep -oE "'[0-9]+\.[0-9]+\.[0-9]+'" "$dst_file" | head -1 | tr -d "'" || true)
+  if [ -n "$ver" ]; then
+    echo "  $name $ver"
   fi
 done
 

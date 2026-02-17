@@ -13,11 +13,14 @@ console.log = (...args) => console.error(...args);
 // These attach to globalThis.MV
 import './MVMF.js';
 import './MVSB.js';
+import './MVXP.js';
 import './MVIO.js';
 import './MVRP.js';
 import './MVRest.js';
 import './MVRP_Dev.js';
 import './MVRP_Map.js';
+
+globalThis.MV.MVMF.Core.Require('MVRP_Dev,MVRP_Map');
 
 // Keep console.log redirected to stderr for the MCP lifetime
 
