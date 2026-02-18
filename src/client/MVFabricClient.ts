@@ -1106,12 +1106,10 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
   async findObjects(scopeId: string, query: SearchQuery): Promise<FabricObject[]> {
     await this.ensureConnected();
 
-    // Use server-side SEARCH when we have a text query
     if (query.namePattern) {
       return this.serverSearch(scopeId, query);
     }
 
-    // Fall back to client-side filtering for non-text queries
     const allObjects = await this.loadFullTree(scopeId);
     return allObjects.filter(obj => {
       if (query.resourceUrl && obj.resourceReference !== query.resourceUrl) return false;
@@ -1137,32 +1135,21 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
       this.objectCache.set(scopeId, pScene);
     }
 
-    const pIAction = pScene.Request('SEARCH');
-    if (!pIAction) {
-      // SEARCH not available on this object type, fall back to full tree
-      const allObjects = await this.loadFullTree(scopeId);
-      const pattern = new RegExp(query.namePattern!, 'i');
-      return allObjects.filter(obj => pattern.test(obj.name));
-    }
-
-    const payload = pIAction.pRequest;
-
-    // Set the parent context based on object type
-    if (pScene.sID === 'RMCObject') {
-      payload.twRMCObjectIx = pScene.twObjectIx;
-    } else {
-      payload.twRMTObjectIx = pScene.twObjectIx;
-    }
-
-    payload.dX = query.positionRadius?.center.x ?? 0;
-    payload.dY = query.positionRadius?.center.y ?? 0;
-    payload.dZ = query.positionRadius?.center.z ?? 0;
-    payload.sText = query.namePattern!.toLowerCase();
-
     const response = await this.sendAction(pScene, 'SEARCH', (p: any) => {
-      Object.assign(p, payload);
+      if (pScene.sID === 'RMCObject') {
+        p.twRMCObjectIx = pScene.twObjectIx;
+      } else {
+        p.twRMTObjectIx = pScene.twObjectIx;
+      }
+      p.dX = query.positionRadius?.center.x ?? 0;
+      p.dY = query.positionRadius?.center.y ?? 0;
+      p.dZ = query.positionRadius?.center.z ?? 0;
+      p.sText = query.namePattern!.toLowerCase();
     });
 
+    if (response.nResult === -1) {
+      throw new Error('Search is not supported on this server. Use get_object to browse the hierarchy manually.');
+    }
     if (response.nResult !== 0) {
       throw new Error(this.formatResponseError('Search failed', response));
     }
@@ -1170,22 +1157,15 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     const results: FabricObject[] = [];
     const resultSet = response.aResultSet?.[0] || [];
     for (const item of resultSet) {
-      // Construct prefixed ID from whichever ID field is present
-      let resultObjectId: string | null = null;
-      if (item.twRMPObjectIx) {
-        resultObjectId = formatObjectRef(ClassIds.RMPObject, item.twRMPObjectIx);
-      } else if (item.twRMTObjectIx) {
-        resultObjectId = formatObjectRef(ClassIds.RMTObject, item.twRMTObjectIx);
-      } else if (item.twRMCObjectIx) {
-        resultObjectId = formatObjectRef(ClassIds.RMCObject, item.twRMCObjectIx);
-      }
-      if (resultObjectId) {
-        try {
-          const obj = await this.getObject(resultObjectId);
-          results.push(obj);
-        } catch {
-          // Skip objects we can't open
-        }
+      const objectIx = item.ObjectHead_twObjectIx;
+      const classId = item.ObjectHead_wClass_Object;
+      if (!objectIx || !classId) continue;
+      const resultObjectId = formatObjectRef(classId, objectIx);
+      try {
+        const obj = await this.getObject(resultObjectId);
+        results.push(obj);
+      } catch {
+        // Skip objects we can't open
       }
     }
 
@@ -1265,7 +1245,10 @@ export class MVFabricClient extends MV.MVMF.NOTIFICATION {
     return new Promise((resolve, reject) => {
       const pIAction = pObject.Request(actionName);
       if (!pIAction) {
-        reject(new Error(`Cannot ${this.translateError(actionName)} under this parent type`));
+        const message = actionName === 'SEARCH'
+          ? 'Search is only available for celestial or terrestrial roots'
+          : `Cannot ${this.translateError(actionName)} under this parent type`;
+        reject(new Error(message));
         return;
       }
 

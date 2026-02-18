@@ -47,7 +47,7 @@ export const bulkTools = {
     }),
   },
   find_objects: {
-    description: 'Search for objects by name pattern, position radius, or resource URL. Uses server-side SEARCH action for name queries (begins-with matching on lowercased text). Falls back to loading the subtree under the scoped object for non-text queries.',
+    description: 'Search for objects by name pattern, position radius, or resource URL. Uses server-side SEARCH action for name queries (case-insensitive begins-with matching). For non-text queries, loads the full subtree under the scoped object, and searches in-memory. Avoid using on root objects, or for fabrics with deep hierarchies.',
     inputSchema: z.object({
       scopeId: z.string().describe('Object ID to scope the search to. Typically a scene root from list_scenes, but can be any object. (e.g., "physical:1", "terrestrial:3")'),
       query: z.object({
@@ -97,5 +97,9 @@ export async function handleFindObjects(
     position: obj.transform.position,
     resourceReference: obj.resourceReference,
   }));
-  return JSON.stringify(paginate(items, args.offset, args.limit));
+  const result = paginate(items, args.offset, args.limit);
+  if (result.total === 0 && args.query.namePattern) {
+    return JSON.stringify({ ...result, hint: 'No results found. Search uses case-insensitive begins-with matching on the name. Try a shorter prefix, or use get_object to browse the hierarchy manually.' });
+  }
+  return JSON.stringify(result);
 }
