@@ -1,13 +1,88 @@
-# Plan: Unified Fabric Client
+# Plan: Unified Manifolder Client
 
 ## Context
 
-`fabric-mcp/MVFabricClient.ts` (1279 lines, TypeScript, Node.js) and `Manifolder/mv-client.js` (662 lines, JavaScript, browser) both extend `MV.MVMF.NOTIFICATION` and interact with Fabric scenes. They serve two consumption patterns:
+`fabric-mcp/src/client/ManifolderClient.js` (Node.js) and `Manifolder/client/js/ManifolderClient.js` (browser) both extend `MV.MVMF.NOTIFICATION` and interact with Fabric scenes. They serve two consumption patterns:
 
 - **Subscription-based (push)**: Attach to models, receive notifications. Manifolder uses this for live scene rendering, and will extend it with fire-and-forget editing.
 - **Promise-based (pull)**: Call a method, await a typed result. fabric-mcp uses this for MCP tool request-response.
 
-These patterns are orthogonal — a single class can implement both, exposing two TypeScript interfaces.
+These patterns are orthogonal — a single class can implement both, exposing two contract surfaces (`IManifolderSubscriptionClient` and `IManifolderPromiseClient`) documented via JSDoc typedefs in one JavaScript file.
+
+## Current Progress (2026-02-19)
+
+### Completed in `fabric-mcp`
+
+- Unified client implemented at `src/client/ManifolderClient.js` with both contract surfaces:
+  - `IManifolderSubscriptionClient`
+  - `IManifolderPromiseClient`
+- Naming aligned to current decision:
+  - `ManifolderClient`
+  - `IManifolderSubscriptionClient`
+  - `IManifolderPromiseClient`
+- MCP handlers now consume the promise interface only (`src/tools/*.ts` import `IManifolderPromiseClient`).
+- Legacy TS client replaced in this repo by JS client copy + typings (`src/client/ManifolderClient.d.ts`).
+- Unit test suite added and passing (`src/client/ManifolderClient.test.js`).
+- Integration test suite added (`test/integration/ManifolderClient.integration.test.js`).
+- Public factory exports added:
+  - `createManifolderSubscriptionClient()`
+  - `createManifolderPromiseClient()`
+- MCP bootstrap now instantiates via promise factory (`src/index.ts`) instead of direct class + view wrapping.
+- `loadMap` removed from subscription interface contract (`src/client/ManifolderClient.d.ts`) and subscription view method list (`src/client/ManifolderClient.js`).
+- Unit tests now include factory-surface checks and full interface-method invocation coverage through interface views.
+- Write confirmation now uses strict notification-first behavior:
+  - CUD waits for model notifications to confirm mutation success.
+  - No refresh fallback is used in CUD paths.
+- Canonical sync executed: `../Manifolder/client/js/ManifolderClient.js` and `src/client/ManifolderClient.js` are currently identical.
+- Cross-repo client tests currently pass in both repos (`npm test` in `fabric-mcp` and `Manifolder/client`).
+- Manifolder app consumption updated to subscription factory + `connect`:
+  - `../Manifolder/client/js/app.js` imports `createManifolderSubscriptionClient()`
+  - map load path now calls `client.connect(url)` (no `loadMap`).
+- Integration write tests now enforce owned-ID safety boundaries for CUD.
+- Manual live fixture recorder added:
+  - Command: `npm run test:record-fixtures`
+  - Script: `test/integration/record-manifolder-fixtures.js`
+  - Output: `test/fixtures/manifolder/live/*.json` (gitignored)
+- First live fixture snapshot captured on `default` profile:
+  - `test/fixtures/manifolder/live/latest.json`
+  - Includes action request/response payloads and raw notice shapes.
+- Live integration validation completed on default server profile:
+  - Command: `FABRIC_IT_ENABLED=1 FABRIC_IT_WRITE=1 npm run test:integration`
+  - Result: 3/3 passing (`connect/disconnect`, `scene browse`, `optional write path create/delete scene`).
+- Move/delete notification race fixed:
+  - Root cause: moved object cache entry could retain stale parent metadata when child models are not auto-attached from parent notifications.
+  - Fix: `moveObject` evicts moved object cache entry after successful confirmation so later CUD reloads authoritative state.
+  - Regression coverage: unit test `moveObject evicts moved object cache entry so later operations reload authoritative parent`.
+- Parent-notification behavior aligned with requirement:
+  - Child models are cached but not auto-attached when seen via parent notifications.
+- Integration teardown stability hardened:
+  - Non-concurrent integration tests and graceful disconnect flow prevent post-test async teardown faults.
+- Temporary delete-trace instrumentation used for diagnosis was removed after validation.
+
+### Open TODOs
+
+- **Test depth for notification-first writes:** add explicit tests for create/update/delete/move notification confirmation paths and timeout fallback behavior.
+- **Factory-only public API hardening:** remove/retire direct class exports from public consumption once compatibility impact is resolved.
+- **Cross-repo verification:** run Manifolder browser smoke/compat tests (not just Node client tests) against the same client revision.
+- **CI gates:** enforce drift check + tests in both repos as required by this plan.
+- **Operational tuning:** evaluate whether to keep current per-step integration diagnostics or reduce log verbosity now that core flows are stable.
+
+### Locked Test Policy
+
+1. **Live fixture scope is full:** record real payloads for the full interface surface (including CUD, move, bulk, and notification paths).
+2. **Fixture refresh is manual-only:** capture/update fixtures via explicit operator command; no automatic refresh.
+3. **Unit tests must adhere to real payload shapes:** interface-surface tests use captured payload fixtures for equivalent operations/events. Any synthetic fixture must be explicitly marked and justified.
+4. **Safety boundary for writes:** tests may only mutate run-created scenes/objects tracked as test-owned IDs; never touch pre-existing fabric content.
+5. **Target fabric for recording:** use `default` profile for now.
+6. **CI policy (Option A):** CI runs unit tests + drift checks only. Live integration/recording/write tests remain manual and opt-in.
+
+### Session Handoff Notes
+
+- Canonical source remains `../Manifolder/client/js/ManifolderClient.js`; `fabric-mcp/src/client/ManifolderClient.js` is a synced copy.
+- Preferred write-confirmation strategy is **notification-first**; targeted refresh is currently fallback-only on notification timeout.
+- `list_objects` behavior should remain unchanged: list loaded subtree under `scopeId` (including `scopeId`) without forcing deep loads.
+- Global Codex MCP server `fabric` is configured via `~/.codex/config.toml` (`[mcp_servers.fabric]`).
+- To resume in a new session quickly: read this section plus `Current Progress` and `Open TODOs` in this file first.
 
 ## Architecture: Model Layer First
 
@@ -44,12 +119,12 @@ This is the only write API in the entire MVMF stack. rp1.js (SceneAssembler) use
 
 The unified client adds write methods that encapsulate `Request`/`Send` + payload construction, so neither consumer ever touches the action protocol directly. These methods are shared by both interfaces:
 
-- **IFabricDirect** calls them and awaits the promise
-- **IFabricSubscription** calls them fire-and-forget (for future editing support in Manifolder)
+- **IManifolderPromiseClient** calls them and awaits the promise
+- **IManifolderSubscriptionClient** calls them fire-and-forget (for future editing support in Manifolder)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  MVFabricClient extends MV.MVMF.NOTIFICATION                     │
+│  ManifolderClient extends MV.MVMF.NOTIFICATION                     │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │  Core (from MVClient)                                      │  │
@@ -75,17 +150,17 @@ The unified client adds write methods that encapsulate `Request`/`Send` + payloa
 │              ┌───────────────┴───────────────┐                   │
 │              ▼                               ▼                   │
 │  ┌──────────────────────┐  ┌──────────────────────────────────┐ │
-│  │  IFabricSubscription │  │  IFabricDirect                   │ │
+│  │  IManifolderSubscriptionClient │  │  IManifolderPromiseClient                   │ │
 │  │  (Manifolder)        │  │  (fabric-mcp)                    │ │
 │  │                      │  │                                  │ │
 │  │  openModel()         │  │  getObject()                     │ │
-│  │  closeModel()        │  │  createObject() ─→ _createChild  │ │
-│  │  subscribe()         │  │  updateObject() ─→ _updateFields │ │
-│  │  enumerateChildren() │  │  deleteObject() ─→ _deleteChild  │ │
-│  │  searchNodes()       │  │  moveObject()   ─→ _reparent     │ │
-│  │  on/off events       │  │  listScenes()                    │ │
-│  │                      │  │  findObjects()                   │ │
-│  │  Direct model-layer  │  │  bulkUpdate()                    │ │
+│  │  closeModel()        │  │  listObjects()                   │ │
+│  │  subscribe()         │  │  createObject() ─→ _createChild  │ │
+│  │  enumerateChildren() │  │  updateObject() ─→ _updateFields │ │
+│  │  searchNodes()       │  │  deleteObject() ─→ _deleteChild  │ │
+│  │  on/off events       │  │  moveObject()   ─→ _reparent     │ │
+│  │                      │  │  list/create/deleteScene()       │ │
+│  │  Direct model-layer  │  │  findObjects(), bulkUpdate()     │ │
 │  │  access + fire-and-  │  │                                  │ │
 │  │  forget CRUD         │  │  Promise wrappers +              │ │
 │  │                      │  │  _toFabricObject serialization   │ │
@@ -123,11 +198,11 @@ These internal methods own all `Request`/`Send` interaction. No code outside thi
 
 **`_sendAction(pIAction)`** — the only place `pIAction.Send()` is called
 - Wraps `Send(this, callback)` in a promise with timeout
-- All CRUD methods and search delegate here
+- All CRUD methods and SEARCH actions delegate here
 
 ### What goes away from fabric-mcp
 
-fabric-mcp's `MVFabricClient.ts` reimplements several things the model layer provides:
+fabric-mcp's former `MVFabricClient.ts` implementation reimplements several things the model layer provides:
 
 | fabric-mcp reimplements | Model layer provides |
 |---|---|
@@ -139,17 +214,26 @@ fabric-mcp's `MVFabricClient.ts` reimplements several things the model layer pro
 | `loadDirectChildren` / `loadFullTree` recursive open | `enumerateChildren` via `Child_Enum` + `openModel` for deeper loads |
 | Raw `Request`/`Send` calls throughout CRUD methods | CRUD layer encapsulates all action protocol interaction |
 
-## Design: Single Class, Two Interfaces
+## Design: Single Implementation, Two Public Interfaces
+
+Internal implementation remains one class, but public construction is factory-based so each consumer chooses exactly one interface surface:
 
 ```
-IFabricSubscription          IFabricDirect
+createManifolderSubscriptionClient(): IManifolderSubscriptionClient
+createManifolderPromiseClient(): IManifolderPromiseClient
+```
+
+`ManifolderClient` remains internal implementation detail (not part of public API contract).
+
+```
+IManifolderSubscriptionClient          IManifolderPromiseClient
 (Manifolder uses this)       (fabric-mcp uses this)
 ─────────────────────        ─────────────────────
 on(event, handler)           listScenes()
 off(event, handler)          openScene(id)
-connect(url, options?)       createScene(name)
+connect(url, options?)       createScene(name, objectType?)
 disconnect()                 deleteScene(id)
-openModel(opts)              getObject(id)
+openModel(opts)              listObjects(scopeId, filter?)
 closeModel(opts)             createObject(params)
 subscribe(opts)              updateObject(params)
 searchNodes(text)            deleteObject(id)
@@ -161,21 +245,34 @@ getResourceRootUrl()         bulkUpdate(operations)
 
 Both interfaces share: `connect`, `disconnect`, `connected`, `getResourceRootUrl`.
 
-## Package: `mv-fabric-client`
+### Locked behavior decisions
 
-**Location:** `../mv-fabric-client/` (sibling to fabric-mcp and Manifolder under `Metaverse/`)
+The unified implementation must preserve these behaviors from current consumers:
+
+1. **Scene APIs remain in `IManifolderPromiseClient`**: `createScene` and `deleteScene` stay as first-class methods (thin wrappers over object CRUD under root).
+2. **Single `connect` return type for both interfaces**: `connect` resolves to a typed `ConnectResult` that includes the connected root model; direct consumers can ignore it.
+3. **Factory-only public API**: consumers construct clients only through `createManifolderSubscriptionClient()` or `createManifolderPromiseClient()`; `ManifolderClient` is internal.
+4. **One consumer, one surface**: Manifolder exclusively uses `IManifolderSubscriptionClient`; MCP exclusively uses `IManifolderPromiseClient`.
+5. **Drop `loadMap` from the interface contract**: Manifolder uses `connect` directly for map loading.
+6. **Per-repo copies with one canonical owner**: both repos keep their own `ManifolderClient.js` copy, but the canonical source is Manifolder (for now). fabric-mcp syncs from that canonical file.
+7. **No client-side admin gate on CRUD**: connection without `adminKey` (MSF scene-root mode) may still call CRUD APIs; authorization is enforced by the Fabric server.
+8. **`listObjects` is part of Layer 3**: it remains a first-class direct API method.
+9. **`_sendAction` is the only `Send()` call site**: this includes SEARCH action dispatch.
+10. **`bulkUpdate` is best-effort, non-transactional**: partial success is expected and reported; no rollback.
+
+## Shared Source Layout
+
+**Canonical location (for now):** `../Manifolder/client/js/ManifolderClient.js`
 
 ### Structure
 ```
-mv-fabric-client/
-  package.json            # type: module, main: dist/index.js
-  tsconfig.json           # target: ES2022, module: NodeNext, declaration: true
-  src/
-    index.ts              # Re-exports class, interfaces, types, constants
-    MVFabricClient.ts     # Single unified class
-    interfaces.ts         # IFabricSubscription, IFabricDirect
-    types.ts              # Vector3, Quaternion, Transform, FabricObject, Scene, etc.
-    constants.ts          # ClassIds, OBJECT_TYPES, CLASS_ID_TO_TYPE, ObjectTypeMap
+Manifolder/
+  client/js/ManifolderClient.js          # Canonical unified client source (class + constants + helpers + JSDoc typedefs)
+  client/js/ManifolderClient.test.js     # Canonical unit/integration tests for unified client
+
+fabric-mcp/
+  src/client/ManifolderClient.js         # Synced copy of canonical source
+  src/client/ManifolderClient.d.ts       # Generated typings for TS consumers
 ```
 
 ### MVMF Vendor Libraries — Stay in Each Project
@@ -184,74 +281,21 @@ The vendor libs stay where they are. Each project loads them its own way:
 - fabric-mcp: Node.js shims (`node-shim.js`) + ESM imports
 - Manifolder: `<script>` tags in HTML
 
-The shared package assumes `globalThis.MV` is already set up. It declares `declare const MV: any`.
+The shared file assumes `globalThis.MV` is already set up.
 
-### interfaces.ts
+### API Contracts (JSDoc in canonical `ManifolderClient.js`)
 
-```typescript
-export type FabricEventMap = {
-  connected: void;
-  disconnected: void;
-  status: string;
-  mapData: any;                          // root MVMF model
-  nodeInserted: { mvmfModel: any; parentType: string; parentId: number };
-  nodeUpdated: { id: number; type: string; mvmfModel: any };
-  nodeDeleted: { id: number; type: string; sourceParentType: string; sourceParentId: number };
-  modelReady: { mvmfModel: any };
-};
+The canonical source file declares JSDoc typedefs for:
+- `FabricEventMap`
+- `IManifolderSubscriptionClient`
+- `IManifolderPromiseClient`
+- `createManifolderSubscriptionClient`, `createManifolderPromiseClient`
+- `FabricObject`, `Scene`, `SearchQuery`, `ObjectFilter`, `BulkOperation`
+- `ConnectOptions`, `ConnectResult`, `ConnectionStatus`
 
-export interface IFabricSubscription {
-  connect(url: string, options?: ConnectOptions): Promise<any>;
-  disconnect(): Promise<void>;
-  readonly connected: boolean;
-  getResourceRootUrl(): string;
+`src/client/ManifolderClient.d.ts` in fabric-mcp is generated from the canonical JSDoc and is not hand-edited.
 
-  on<K extends keyof FabricEventMap>(event: K, handler: (data: FabricEventMap[K]) => void): void;
-  off<K extends keyof FabricEventMap>(event: K, handler: (data: FabricEventMap[K]) => void): void;
-
-  openModel(opts: { sID: string; twObjectIx: number; mvmfModel?: any }): void;
-  closeModel(opts: { sID: string; twObjectIx: number }): void;
-  subscribe(opts: { sID: string; twObjectIx: number }): void;
-  enumerateChildren(model: any): any[];
-  searchNodes(searchText: string): Promise<SearchResults>;
-}
-
-export interface IFabricDirect {
-  connect(url: string, options?: ConnectOptions): Promise<void>;
-  disconnect(): Promise<void>;
-  readonly connected: boolean;
-  getResourceRootUrl(): string;
-  getStatus(): ConnectionStatus;
-
-  listScenes(): Promise<Scene[]>;
-  openScene(sceneId: string): Promise<FabricObject>;
-  createScene(name: string): Promise<Scene>;
-  deleteScene(sceneId: string): Promise<void>;
-
-  listObjects(sceneId: string, filter?: ObjectFilter): Promise<FabricObject[]>;
-  getObject(objectId: string): Promise<FabricObject>;
-  createObject(params: CreateObjectParams): Promise<FabricObject>;
-  updateObject(params: UpdateObjectParams): Promise<FabricObject>;
-  deleteObject(objectId: string, allowUnknownType?: boolean): Promise<void>;
-  moveObject(objectId: string, newParentId: string, skipRefetch?: boolean): Promise<FabricObject>;
-
-  findObjects(sceneId: string, query: SearchQuery): Promise<FabricObject[]>;
-  bulkUpdate(operations: BulkOperation[]): Promise<BulkResult>;
-}
-```
-
-### types.ts
-
-Move shared types from `fabric-mcp/src/types.ts`:
-- `Vector3`, `Quaternion`, `Transform`, `BoundingBox`
-- `FabricObject` (currently `RMPObject` in fabric-mcp — rename)
-- `Scene`, `ObjectFilter`, `SearchQuery`
-- `CreateObjectParams`, `UpdateObjectParams`, `BulkOperation`
-- `ConnectionStatus`, `ConnectOptions`
-- `ClassIds`, `ClassPrefixes`, `ClassIdToPrefix`, `ObjectTypeMap`
-- `parseObjectRef`, `formatObjectRef`
-
-### MVFabricClient.ts — Layered Architecture
+### Unified Client Class — Layered Architecture
 
 **Layer 1: Core (from MVClient — the foundation)**
 
@@ -271,7 +315,7 @@ MVClient's model-layer code becomes the base class or core section:
 
 **Layer 2: CRUD layer (new — fills the MVMF write gap)**
 
-Encapsulates all `Request`/`Send` interaction. No code outside this layer touches the action protocol.
+Encapsulates all `Request`/`Send` interaction (including SEARCH). No code outside this layer touches the action protocol.
 
 | Internal method | What it encapsulates |
 |---|---|
@@ -282,8 +326,8 @@ Encapsulates all `Request`/`Send` interaction. No code outside this layer touche
 | `_sendAction(pIAction)` | Wraps `pIAction.Send(this, callback)` in a promise with timeout. The **only** place `Send` is called. |
 
 Both interfaces use these methods:
-- **IFabricDirect**: `createObject()` calls `_createChild()`, awaits the result, serializes via `_toFabricObject()`
-- **IFabricSubscription**: Manifolder's future editing calls `_createChild()` fire-and-forget, relying on `onInserted` notification to update the UI
+- **IManifolderPromiseClient**: `createObject()` calls `_createChild()`, awaits the result, serializes via `_toFabricObject()`
+- **IManifolderSubscriptionClient**: Manifolder's future editing calls `_createChild()` fire-and-forget, relying on `onInserted` notification to update the UI
 
 **Layer 3: Public interface methods**
 
@@ -292,21 +336,24 @@ Both interfaces use these methods:
 | `getObject(id)` | `_openAndReady(classId, numericId)` → `_toFabricObject(model)` |
 | `listScenes()` | Wait for root model ready → `enumerateChildren(pRMRoot)` → map to `Scene[]` |
 | `openScene(id)` | `_openAndReady` on scene → enumerate + open direct children → `_toFabricObject` |
+| `createScene(name, objectType?)` | `createObject({ parentId: 'root', ... })` wrapper that returns `Scene` |
+| `deleteScene(sceneId)` | `_openAndReady` root → `_deleteChild(root, sceneRoot)` with `bDeleteAll=1` |
+| `listObjects(scopeId, filter?)` | Enumerates currently loaded subtree from scope via `enumerateChildren`; applies optional client-side filters |
 | `createObject(params)` | `_openAndReady` parent → `_createChild(parent, params)` → `_toFabricObject` |
 | `updateObject(params)` | `_openAndReady` object → `_updateFields(model, params)` → `_toFabricObject` |
 | `deleteObject(id)` | `_openAndReady` object → read parent → `_openAndReady` parent → `_deleteChild(parent, child)` |
 | `moveObject(id, newParent)` | `_openAndReady` object → `_openAndReady` new parent → `_reparent(model, newParent)` → `_toFabricObject` |
 | `findObjects(sceneId, query)` | Uses `searchNodes` (model-layer search) → `_toFabricObject` each result |
-| `bulkUpdate(ops)` | Batched calls to `createObject`/`updateObject`/`deleteObject`/`moveObject` with concurrency control |
+| `bulkUpdate(ops)` | Batched calls to `createObject`/`updateObject`/`deleteObject`/`moveObject` with concurrency control; best-effort partial success, no rollback |
 
 **`_openAndReady` helper**: calls `Model_Open`, attaches if needed, returns a promise that resolves when `onReadyState` fires with `READY`. This replaces fabric-mcp's `openAndWait`/`waitForReady` polling with the notification-driven pattern MVClient already uses.
 
 **Notification handlers do double duty:**
-```typescript
-onInserted(pNotice: any) {
+```javascript
+onInserted(pNotice) {
   const child = pNotice.pData?.pChild;
   const parent = pNotice.pCreator;
-  // Event emission (IFabricSubscription consumers)
+  // Event emission (IManifolderSubscriptionClient consumers)
   if (this._connected && child) {
     this._emit('nodeInserted', {
       mvmfModel: child,
@@ -321,47 +368,99 @@ onInserted(pNotice: any) {
 **Connection flow supports both modes via `ConnectOptions`:**
 - With `adminKey`: login flow → opens `RMRoot(1)` → `listScenes` etc. available
 - Without `adminKey` (or with `sceneWClass`/`sceneObjectIx`): anonymous → opens specific scene root from MSF config → emits `mapData`
+- In anonymous mode, CRUD APIs are still callable; permission decisions are server-enforced (no artificial client-side admin gate)
 - Both modes: emit `connected` event, populate searchable indices
 
 ## Changes to Consuming Projects
 
 ### fabric-mcp
 
-1. Remove `src/client/MVFabricClient.ts` entirely
-2. Remove `src/types.ts` (moved to shared package)
-3. Add dependency: `"mv-fabric-client": "file:../mv-fabric-client"`
-4. Update all imports in `src/tools/*.ts` and `src/index.ts`:
-   - `import { MVFabricClient, type IFabricDirect, type FabricObject, ... } from 'mv-fabric-client'`
-   - Rename `RMPObject` → `FabricObject` throughout
-5. Keep: vendor shims (`src/vendor/`), MCP tool layer, config, storage, error translation
-6. The tool layer continues to call `client.createObject(...)`, `client.getObject(...)`, etc. — same API, just imported from the shared package
+1. Replace `src/client/MVFabricClient.ts` with `src/client/ManifolderClient.js` (synced copy from canonical Manifolder source).
+2. Generate `src/client/ManifolderClient.d.ts` from canonical JSDoc for TypeScript tooling.
+3. Update imports in `src/tools/*.ts` and `src/index.ts` to import from local JS client module:
+   - `import { createManifolderPromiseClient } from './client/ManifolderClient.js'` (or `./client/index.js`)
+   - instantiate once: `const client = createManifolderPromiseClient()`
+4. Remove duplicate local constants/helpers/types that are now exported from `src/client/ManifolderClient.js`.
+5. Keep fabric-mcp-specific code: vendor shims (`src/vendor/`), MCP tool handlers, config, storage, and error translation.
+6. Keep existing MCP tool API surface unchanged (`list_scenes`, `open_scene`, `create_object`, etc.); only the underlying client implementation is swapped.
 
 ### Manifolder
 
-1. Remove `client/js/mv-client.js` entirely
-2. Copy compiled `mv-fabric-client/dist/` into `client/lib/mv-fabric-client/`
-3. Update `client/js/app.js`:
-   - `import { MVFabricClient } from '../lib/mv-fabric-client/index.js'`
-   - Constructor: `this.client = new MVFabricClient()`
-   - Type reference (JSDoc): `/** @type {import('../lib/mv-fabric-client').IFabricSubscription} */`
-4. `loadMap(url)` call becomes `client.connect(url)` — the client reads wClass/twObjectIx from MSF config and emits `mapData` when ready
-5. Keep: model.js, node-adapter.js, views, node-helpers.js (resource URL resolution is Manifolder-specific)
-6. `model.js` continues subscribing via `client.on('nodeInserted', ...)` etc. — same event contract
+1. Keep `client/js/ManifolderClient.js` as the canonical source file and replace its internals with unified client implementation.
+2. Update `client/js/app.js` to import `createManifolderSubscriptionClient()` and use that surface only.
+3. Remove direct class construction from Manifolder app code.
+4. Update map loading flow:
+   - `const { rootModel } = await client.connect(url)` and pass `rootModel` to `model.setTree(...)`
+   - keep handling `mapData` event for compatibility if needed
+5. Keep Manifolder-specific code: `model.js`, `node-adapter.js`, views, `node-helpers.js`.
+6. Keep event contract unchanged (`nodeInserted`, `nodeUpdated`, `nodeDeleted`, `modelReady`, `disconnected`).
+
+### Source Synchronization Rule
+
+Only `../Manifolder/client/js/ManifolderClient.js` is edited manually (canonical source). `fabric-mcp/src/client/ManifolderClient.js` is synced from it via script. Add sync scripts in both repos and fail CI if files drift.
 
 ## Implementation Order
 
-1. Create `mv-fabric-client/` package skeleton (package.json, tsconfig.json)
-2. Write `types.ts` and `constants.ts` (move from fabric-mcp/src/types.ts)
-3. Write `interfaces.ts` (IFabricSubscription, IFabricDirect, FabricEventMap)
-4. Port MVClient (Manifolder) to TypeScript as Layer 1 core of `MVFabricClient.ts`
-5. Add Layer 2 CRUD methods (`_createChild`, `_updateFields`, `_deleteChild`, `_reparent`, `_sendAction`) — encapsulate all `Request`/`Send` + payload construction
-6. Add Layer 3 public interface methods + `_toFabricObject` serialization
-7. Build, verify compilation
-8. Wire up fabric-mcp: update imports, remove old client/types, test with MCP tools
-9. Wire up Manifolder: copy compiled output, update imports, test in browser
+1. Replace `../Manifolder/client/js/ManifolderClient.js` with the unified implementation (canonical source).
+2. Add CRUD/action layer (`_createChild`, `_updateFields`, `_deleteChild`, `_reparent`, `_sendAction`) in canonical source.
+3. Add direct API wrappers (`listScenes`, `openScene`, `createScene`, `listObjects`, `bulkUpdate`, etc.) and `_toFabricObject`.
+4. Add JSDoc typedef contracts (`IManifolderSubscriptionClient`, `IManifolderPromiseClient`, data shapes) in canonical source.
+5. Refactor to factory-only public API and remove `loadMap` from subscription contract (`connect` only).
+6. Update Manifolder app to consume only `IManifolderSubscriptionClient` via `createManifolderSubscriptionClient()`.
+7. Update MCP bootstrap to consume only `IManifolderPromiseClient` via `createManifolderPromiseClient()`.
+8. Add/verify canonical tests in Manifolder against this source.
+9. Expand unit tests to cover full `IManifolder*` surface through interface contracts.
+10. Add record/replay fixture flow for live response capture and mock-shape validation.
+11. Sync canonical source into `fabric-mcp/src/client/ManifolderClient.js`.
+12. Generate/update `fabric-mcp/src/client/ManifolderClient.d.ts` from canonical JSDoc.
+13. Wire `fabric-mcp` imports to local synced JS module and remove old TS client implementation.
+14. Add drift-check + test steps in CI for both repos.
+
+## Automated Test Suite
+
+### Canonical Client Tests (in Manifolder)
+
+- **Unit tests** (Vitest):
+  - object ref helpers: `parseObjectRef`, `formatObjectRef`
+  - type/class maps and validation behavior
+  - event emitter behavior (`on`/`off`/emit ordering and isolation)
+  - error translation and formatting helpers
+- **Integration tests** (mocked MVMF objects):
+  - connection lifecycle: `connect`, `disconnect`, reconnect, teardown cleanup
+  - ready-state flow via notifications (`onReadyState`-driven resolution)
+  - CRUD payload construction for create/update/delete/move
+  - `_sendAction` timeout and error paths; verify all `Send()` calls go through `_sendAction`
+  - anonymous-mode behavior (client does not artificially block CRUD; permission failures come from server responses)
+  - `bulkUpdate` partial-success semantics and aggregated error reporting
+  - search behavior (supported vs unavailable SEARCH actions)
+
+### fabric-mcp Compatibility Tests
+
+- Tool-handler contract tests with mocked client transport:
+  - `connection`, `scene`, `object`, and `bulk` handlers preserve current JSON response shapes
+  - scene/object IDs remain in prefixed format (`physical:`, `terrestrial:`, `celestial:`)
+- Smoke test with real client instance (when env/profile provided):
+  - `fabric_connect` → `list_scenes` → `open_scene` → CRUD path → `fabric_disconnect`
+
+### Manifolder Compatibility Tests
+
+- Browser-side tests (Vitest + jsdom or existing harness):
+  - `connect(url)` returns root model and `Model.setTree(...)` still works
+  - hierarchy updates on `nodeInserted`/`nodeUpdated`/`nodeDeleted`
+  - `searchNodes` integration remains functional
+  - `closeModel`/`subscribe` behavior preserves expansion/live-update logic
+
+### CI Gates
+
+- Canonical Manifolder client tests must pass before syncing to fabric-mcp.
+- Drift check (`Manifolder canonical` vs `fabric-mcp synced copy`) must pass before merge.
+- fabric-mcp compatibility/unit tests must pass before merge.
+- Manifolder compatibility/unit tests (or smoke test) must pass before merge.
+- Live integration/recording/write tests are excluded from CI and run manually only.
 
 ## Verification
 
-- **fabric-mcp**: `fabric_connect` (earth profile) → `list_scenes` → `open_scene` → `create_object` → `update_object` → `delete_object` → `find_objects` → `bulk_update` → `fabric_disconnect`
+- **fabric-mcp**: `fabric_connect` (earth profile) → `list_scenes` → `create_scene` → `open_scene` → `create_object` → `update_object` → `delete_object` → `find_objects` → `bulk_update` → `delete_scene` → `fabric_disconnect`
 - **Manifolder**: Open in browser → load MSF URL → hierarchy tree populates → search returns results → clicking nodes loads children → live updates render
 - **Both**: `disconnect` tears down cleanly without errors or leaked listeners
+- **Automated**: all shared + consumer compatibility tests pass in CI

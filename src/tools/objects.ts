@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { MVFabricClient } from '../client/MVFabricClient.js';
+import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
 import type { CreateObjectParams, UpdateObjectParams } from '../types.js';
 import { objectTypeSchema, transformFields, celestialFields, vector3Schema } from './schemas.js';
 import { paginate } from '../output.js';
@@ -58,7 +58,7 @@ export const objectTools = {
 };
 
 export async function handleListObjects(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { scopeId: string; filter?: { namePattern?: string; type?: string }; offset?: number; limit?: number }
 ): Promise<string> {
   const objects = await client.listObjects(args.scopeId, args.filter);
@@ -73,7 +73,7 @@ export async function handleListObjects(
 }
 
 export async function handleGetObject(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { objectId: string }
 ): Promise<string> {
   const obj = await client.getObject(args.objectId);
@@ -97,7 +97,7 @@ export async function handleGetObject(
 }
 
 export async function handleCreateObject(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: Omit<CreateObjectParams, 'skipParentRefetch'>
 ): Promise<string> {
   const obj = await client.createObject(args);
@@ -105,7 +105,7 @@ export async function handleCreateObject(
 }
 
 export async function handleUpdateObject(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: Omit<UpdateObjectParams, 'skipRefetch'>
 ): Promise<string> {
   const updated: string[] = [];
@@ -123,7 +123,7 @@ export async function handleUpdateObject(
 }
 
 export async function handleDeleteObject(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { objectId: string }
 ): Promise<string> {
   await client.deleteObject(args.objectId);
@@ -131,7 +131,7 @@ export async function handleDeleteObject(
 }
 
 export async function handleMoveObject(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { objectId: string; newParentId: string }
 ): Promise<string> {
   await client.moveObject(args.objectId, args.newParentId);

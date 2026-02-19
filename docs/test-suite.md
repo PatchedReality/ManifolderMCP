@@ -72,7 +72,7 @@ All should fail with translated error messages.
 | 5.2 | `list_objects(scopeId: <2.3>, limit: 10)` | Lists celestial children under the planet scene |
 | 5.3 | `list_objects(scopeId: <2.3>, filter: {type: "celestial:surface"})` | Only surface objects |
 | 5.4 | `list_objects(scopeId: <2.3>, filter: {namePattern: "Moon"})` | Only the moon |
-| 5.5 | `find_objects(scopeId: <2.2>, query: {namePattern: "Tree"})` | Finds the tree from 3.8 |
+| 5.5 | `find_objects(scopeId: <2.4>, query: {namePattern: "Bench"})` | Finds the bench from 3.10 |
 
 ## 6. Object Updates
 

@@ -38,3 +38,8 @@ coverage/
 *.tmp
 *.temp
 testBlueprints
+
+# Live-captured test fixtures (manual record/replay only)
+test/fixtures/manifolder/live/*
+!test/fixtures/manifolder/live/.gitkeep
+!test/fixtures/manifolder/live/README.md

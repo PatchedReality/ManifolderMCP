@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { MVFabricClient } from '../client/MVFabricClient.js';
+import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
 import type { BulkOperation } from '../types.js';
 import { objectTypeSchema, transformFields, celestialFields, vector3Schema } from './schemas.js';
 import { paginate } from '../output.js';
@@ -65,7 +65,7 @@ export const bulkTools = {
 };
 
 export async function handleBulkUpdate(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { operations: BulkOperation[] }
 ): Promise<string> {
   const result = await client.bulkUpdate(args.operations);
@@ -78,7 +78,7 @@ export async function handleBulkUpdate(
 }
 
 export async function handleFindObjects(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: {
     scopeId: string;
     query: {

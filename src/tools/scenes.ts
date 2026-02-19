@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { MVFabricClient } from '../client/MVFabricClient.js';
+import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
 import { objectTypeSchema } from './schemas.js';
 import { paginate } from '../output.js';
 import { getProfile } from '../config.js';
@@ -45,7 +45,7 @@ export const sceneTools = {
 };
 
 async function ensureConnection(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { profile?: string; url?: string }
 ): Promise<void> {
   const status = client.getStatus();
@@ -80,7 +80,7 @@ async function isAlreadyConnected(
 }
 
 export async function handleListScenes(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { offset?: number; limit?: number; profile?: string; url?: string }
 ): Promise<string> {
   await ensureConnection(client, args);
@@ -98,7 +98,7 @@ export async function handleListScenes(
 }
 
 export async function handleOpenScene(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { sceneId: string; profile?: string; url?: string }
 ): Promise<string> {
   await ensureConnection(client, args);
@@ -123,7 +123,7 @@ export async function handleOpenScene(
 }
 
 export async function handleCreateScene(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { name: string; objectType?: string; profile?: string; url?: string }
 ): Promise<string> {
   await ensureConnection(client, args);
@@ -140,7 +140,7 @@ export async function handleCreateScene(
 }
 
 export async function handleDeleteScene(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { sceneId: string; profile?: string; url?: string }
 ): Promise<string> {
   await ensureConnection(client, args);

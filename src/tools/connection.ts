@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { MVFabricClient } from '../client/MVFabricClient.js';
+import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
 import { getProfile, loadConfig } from '../config.js';
 
 export const connectionTools = {
@@ -46,7 +46,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 }
 
 export async function handleFabricConnect(
-  client: MVFabricClient,
+  client: IManifolderPromiseClient,
   args: { profile?: string; url?: string }
 ): Promise<string> {
   const status = client.getStatus();
@@ -78,11 +78,11 @@ export async function handleFabricConnect(
   });
 }
 
-export async function handleFabricDisconnect(client: MVFabricClient): Promise<string> {
+export async function handleFabricDisconnect(client: IManifolderPromiseClient): Promise<string> {
   await client.disconnect();
   return JSON.stringify({ success: true });
 }
 
-export function handleFabricStatus(client: MVFabricClient): string {
+export function handleFabricStatus(client: IManifolderPromiseClient): string {
   return JSON.stringify(client.getStatus());
 }

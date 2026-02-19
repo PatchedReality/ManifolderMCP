@@ -13,7 +13,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
-import { MVFabricClient } from './client/MVFabricClient.js';
+import {
+  createManifolderPromiseClient,
+} from './client/index.js';
+import type { IManifolderPromiseClient } from './client/ManifolderClient.js';
 import { getProfile } from './config.js';
 import { ScpStorage } from './storage/ScpStorage.js';
 
@@ -68,7 +71,7 @@ const server = new Server(
   }
 );
 
-const client = new MVFabricClient();
+const client: IManifolderPromiseClient = createManifolderPromiseClient();
 let storage: ScpStorage | null = null;
 
 async function getStorage(): Promise<ScpStorage> {
