@@ -1,6 +1,6 @@
 # Integration Tests
 
-`fabric-mcp` now includes opt-in live integration tests for `ManifolderClient`.
+`ManifolderMCP` now includes opt-in live integration tests for `ManifolderClient`.
 
 ## Location
 
@@ -19,7 +19,7 @@ FABRIC_IT_ENABLED=1 npm run test:integration
 Order of precedence:
 
 1. Environment variables
-2. Profile in `~/.config/fabric-mcp/config.json`
+2. Profile in `~/.config/manifolder-mcp/config.json`
 
 ### Environment variables
 
@@ -39,7 +39,7 @@ npm run test:integration
 
 If no env URL is set, tests load:
 
-- `~/.config/fabric-mcp/config.json`
+- `~/.config/manifolder-mcp/config.json`
 - Profile name from `FABRIC_IT_PROFILE` (default: `default`)
 
 ## Optional Destructive Write Test

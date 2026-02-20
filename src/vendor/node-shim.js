@@ -75,7 +75,7 @@ globalThis.XMLHttpRequest = class XMLHttpRequest {
 if (typeof globalThis.navigator !== 'undefined') {
   Object.defineProperties(globalThis.navigator, {
     appVersion: { value: '1.0', writable: true, configurable: true },
-    appName: { value: 'fabric-mcp', writable: true, configurable: true },
+    appName: { value: 'manifolder-mcp', writable: true, configurable: true },
     cookieEnabled: { value: false, writable: true, configurable: true },
     plugins: { value: [], writable: true, configurable: true },
   });
@@ -83,7 +83,7 @@ if (typeof globalThis.navigator !== 'undefined') {
   globalThis.navigator = {
     userAgent: 'Node.js MCP Client',
     appVersion: '1.0',
-    appName: 'fabric-mcp',
+    appName: 'manifolder-mcp',
     cookieEnabled: false,
     plugins: [],
   };

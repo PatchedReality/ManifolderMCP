@@ -1,6 +1,6 @@
-# Fabric MCP Server
+# Manifolder MCP Server
 
-MCP server for editing Fabric spatial scenes from Claude Code and other MCP clients.
+Manifolder MCP server for editing Fabric spatial scenes from Claude Code and other MCP clients.
 
 ## Installation
 
@@ -13,7 +13,7 @@ Requires Node.js >= 18.
 
 ## Configuration
 
-Create `~/.config/fabric-mcp/config.json` with your fabric server settings:
+Create `~/.config/manifolder-mcp/config.json` with your fabric server settings:
 
 ```json
 {
@@ -86,19 +86,65 @@ Use `list_profiles` to see available profiles, then `fabric_connect` with the pr
 - `fabric_connect profile:"default"` → uses "default"
 - `fabric_connect profile:"staging"` → uses "staging"
 
-## Claude Code Setup
+## MCP Client Setup
 
-1. Add the MCP server to Claude Code:
+Build the server first (`npm run build`), then create `~/.config/manifolder-mcp/config.json` (see Configuration above).
+
+Use an absolute path to `dist/index.js` in all commands below.
+
+### Claude Code
 
 ```bash
-# Global (available in all projects)
-claude mcp add -s user fabric node ~/fabric-mcp/dist/index.js
+# User scope (available in all projects)
+claude mcp add --scope user manifolder -- node /absolute/path/to/ManifolderMCP/dist/index.js
 
-# Or project-only
-claude mcp add fabric node ~/fabric-mcp/dist/index.js
+# Project scope
+claude mcp add --scope project manifolder -- node /absolute/path/to/ManifolderMCP/dist/index.js
+
+claude mcp list
 ```
 
-2. Create the config file at `~/.config/fabric-mcp/config.json` (see Configuration above).
+### Codex
+
+```bash
+# Adds server config to ~/.codex/config.toml
+codex mcp add manifolder -- node /absolute/path/to/ManifolderMCP/dist/index.js
+
+codex mcp list
+```
+
+Equivalent manual config:
+
+```toml
+[mcp_servers.manifolder]
+command = "node"
+args = ["/absolute/path/to/ManifolderMCP/dist/index.js"]
+```
+
+### Gemini CLI
+
+```bash
+# User scope (global)
+gemini mcp add -s user manifolder node /absolute/path/to/ManifolderMCP/dist/index.js
+
+# Project scope (default)
+gemini mcp add manifolder node /absolute/path/to/ManifolderMCP/dist/index.js
+
+gemini mcp list
+```
+
+Equivalent manual config in `~/.gemini/settings.json` (or project `.gemini/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "manifolder": {
+      "command": "node",
+      "args": ["/absolute/path/to/ManifolderMCP/dist/index.js"]
+    }
+  }
+}
+```
 
 ## Available Tools
 
@@ -150,7 +196,7 @@ Action resources are JSON files that define functional content:
 
 ## Usage Example
 
-After connecting Claude Code to the MCP:
+After connecting your MCP client to the server:
 
 ```
 > List my fabric profiles

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Fabric MCP Server - an MCP server enabling Claude Code (and other MCP clients) to directly edit spatial Fabric scenes. Wraps MVMF libraries with a thin MCP layer, following the `MVClient` pattern from the SceneAssembler sibling project.
+Manifolder MCP Server - an MCP server enabling Claude Code (and other MCP clients) to directly edit spatial Fabric scenes. Wraps MVMF libraries with a thin MCP layer, following the `MVClient` pattern from the SceneAssembler sibling project.
 
 ## Commands
 
@@ -27,7 +27,7 @@ npm run dev
 ### Core Components
 
 - **MVFabricClient** (`src/client/MVFabricClient.ts`): Fabric client using MVMF libraries with Node.js shims
-- **Config** (`src/config.ts`): Loads `~/.config/fabric-mcp/config.json` for connection profiles and storage backends
+- **Config** (`src/config.ts`): Loads `~/.config/manifolder-mcp/config.json` for connection profiles and storage backends
 - **Tools** (`src/tools/`): MCP tool implementations for connection, scenes, objects, bulk operations, and resources
 
 ### Vendor Libraries
@@ -66,7 +66,7 @@ These files in the sibling `~/dev/PatchedReality/SceneAssembler/` repo are the a
 
 ## Configuration
 
-Server config lives at `~/.config/fabric-mcp/config.json`:
+Server config lives at `~/.config/manifolder-mcp/config.json`:
 ```json
 {
   "default": {

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import '../../src/vendor/mv/index.js';
 import { createManifolderPromiseClient } from '../../src/client/ManifolderClient.js';
 
-const CONFIG_PATH = join(homedir(), '.config', 'fabric-mcp', 'config.json');
+const CONFIG_PATH = join(homedir(), '.config', 'manifolder-mcp', 'config.json');
 const INTEGRATION_ENABLED = /^(1|true|yes)$/i.test(process.env.FABRIC_IT_ENABLED || '');
 const WRITE_ENABLED = /^(1|true|yes)$/i.test(process.env.FABRIC_IT_WRITE || '');
 const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;

@@ -1,7 +1,7 @@
-# Fabric Scene MCP Server
+# Manifolder MCP Server
 
 ## Project Location
-**New standalone project:** `~/dev/PatchedReality/fabric-mcp/`
+**New standalone project:** `~/dev/PatchedReality/ManifolderMCP/`
 (Sibling to SceneAssembler)
 
 ## Goal
@@ -11,7 +11,7 @@ Create an MCP server that allows Claude Code (and other MCP clients) to directly
 **Wrap the MVMF libraries** with a thin MCP layer. Node.js-compatible MVMF libraries are on the horizon, so we'll follow the existing `MVClient` pattern from `docs/SampleClient/js/rp1.js` closely. This keeps us aligned with the official SDK and avoids protocol drift.
 
 ## Config
-`~/.fabric-mcp.json`:
+`~/.config/manifolder-mcp/config.json`:
 ```json
 {
   "default": {
@@ -81,7 +81,7 @@ Resources are uploaded to a directory on the Fabric server (e.g., `https://spati
 
 ## Project Structure
 ```
-fabric-mcp/
+ManifolderMCP/
 ├── package.json
 ├── tsconfig.json
 ├── src/
@@ -132,14 +132,14 @@ From `MVRP_Map.js` lines 2638-2791:
 ## Implementation Steps
 
 ### Phase 0: Project Setup ✓
-1. Create `~/dev/PatchedReality/fabric-mcp/` directory
+1. Create `~/dev/PatchedReality/ManifolderMCP/` directory
 2. Copy this plan to new project as `PLAN.md`
 3. Initialize git repo
 4. User continues in new project session
 
 ### Phase 1: Scaffold (can start now)
 1. Set up Node.js project with MCP SDK (`@modelcontextprotocol/sdk`)
-2. Implement config loading from `~/.fabric-mcp.json` (including storage config)
+2. Implement config loading from `~/.config/manifolder-mcp/config.json` (including storage config)
 3. Define TypeScript interfaces for RMPObject, Transform, IStorageBackend, etc.
 4. Create `IFabricClient` interface matching MVClient pattern
 5. Create stub `MockFabricClient` with hardcoded test data

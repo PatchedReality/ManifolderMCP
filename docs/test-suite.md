@@ -1,4 +1,4 @@
-# Fabric MCP Test Suite
+# Manifolder MCP Test Suite
 
 A manual test suite covering all MCP tools. Run against the `default` profile. All created objects should be cleaned up at the end.
 

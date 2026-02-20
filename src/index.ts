@@ -60,7 +60,7 @@ import {
 
 const server = new Server(
   {
-    name: 'fabric-mcp',
+    name: 'manifolder-mcp',
     version: '0.1.0',
   },
   {
@@ -109,13 +109,13 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
     resources: [
       {
-        uri: 'fabric://guide',
-        name: 'Fabric MCP Agent Guide',
+        uri: 'manifolder://guide',
+        name: 'Manifolder MCP Agent Guide',
         description: 'Workflows and patterns for AI agents: action resources, object manipulation, bulk operations',
         mimeType: 'text/markdown',
       },
       {
-        uri: 'fabric://action-schema',
+        uri: 'manifolder://action-schema',
         name: 'Action Resource Schema',
         description: 'Full schema for action resources (lights, text, rotators, video)',
         mimeType: 'application/json',
@@ -127,7 +127,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const { uri } = request.params;
 
-  if (uri === 'fabric://guide') {
+  if (uri === 'manifolder://guide') {
     const content = readFileSync(AGENT_GUIDE_PATH, 'utf-8');
     return {
       contents: [
@@ -140,7 +140,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     };
   }
 
-  if (uri === 'fabric://action-schema') {
+  if (uri === 'manifolder://action-schema') {
     return {
       contents: [
         {
@@ -273,7 +273,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Fabric MCP server running on stdio');
+  console.error('Manifolder MCP server running on stdio');
 }
 
 process.on('uncaughtException', (error) => {

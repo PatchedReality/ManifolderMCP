@@ -14,22 +14,22 @@ export interface ProfileConfig {
   resourceUrlPrefix?: string;
 }
 
-export interface FabricMCPConfig {
+export interface ManifolderMCPConfig {
   [profileName: string]: ProfileConfig;
 }
 
-const CONFIG_PATH = join(homedir(), '.config', 'fabric-mcp', 'config.json');
+const CONFIG_PATH = join(homedir(), '.config', 'manifolder-mcp', 'config.json');
 
-let cachedConfig: FabricMCPConfig | null = null;
+let cachedConfig: ManifolderMCPConfig | null = null;
 
-export async function loadConfig(): Promise<FabricMCPConfig> {
+export async function loadConfig(): Promise<ManifolderMCPConfig> {
   if (cachedConfig) {
     return cachedConfig;
   }
 
   try {
     const content = await readFile(CONFIG_PATH, 'utf-8');
-    cachedConfig = JSON.parse(content) as FabricMCPConfig;
+    cachedConfig = JSON.parse(content) as ManifolderMCPConfig;
     return cachedConfig;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {

@@ -1,4 +1,4 @@
-# Fabric MCP Agent Guide
+# Manifolder MCP Agent Guide
 
 ## Object Identity
 

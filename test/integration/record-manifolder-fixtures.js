@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import '../../src/vendor/mv/index.js';
 import { ManifolderClient, asManifolderPromiseClient } from '../../src/client/ManifolderClient.js';
 
-const CONFIG_PATH = join(homedir(), '.config', 'fabric-mcp', 'config.json');
+const CONFIG_PATH = join(homedir(), '.config', 'manifolder-mcp', 'config.json');
 const PROFILE_NAME = process.env.FABRIC_IT_PROFILE || 'default';
 const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const OUTPUT_DIR = process.env.FABRIC_IT_RECORD_DIR || 'test/fixtures/manifolder/live';
