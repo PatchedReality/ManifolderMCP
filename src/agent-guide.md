@@ -1,5 +1,13 @@
 # Manifolder MCP Agent Guide
 
+## Coordinate System
+
+Y-up: X = east, Y = up, Z = north.
+- Positions on the ground plane: y = 0
+- Heights go in Y
+- Terrestrial/physical bound: {x: halfExtent, y: fullHeight, z: halfExtent}
+- Celestial bound: {x: halfExtent, y: halfExtent, z: halfExtent} (symmetric)
+
 ## Object Identity
 
 All object IDs use the format `"class:id"`:
