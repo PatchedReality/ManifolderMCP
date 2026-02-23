@@ -1,14 +1,25 @@
 import { z } from 'zod';
 import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
-import type { CreateObjectParams, UpdateObjectParams } from '../types.js';
-import { objectTypeSchema, transformFields, celestialFields, vector3Schema } from './schemas.js';
+import type { CreateObjectParams, FabricObject, UpdateObjectParams } from '../types.js';
+import { objectTypeSchema, transformFields, celestialFields, vector3Schema, scopeTargetParams } from './schemas.js';
 import { paginate } from '../output.js';
+import { resolveScopeTarget } from './scope-target.js';
+import { shapeObjectResponse } from './response-shapers.js';
+import { asMCPClient } from './mcp-client.js';
+
+type ScopeTargetOnly = { scopeId?: string; profile?: string; url?: string };
+
+function stripScopeTarget<T extends ScopeTargetOnly>(args: T): Omit<T, keyof ScopeTargetOnly> {
+  const { scopeId: _scopeId, profile: _profile, url: _url, ...rest } = args;
+  return rest;
+}
 
 export const objectTools = {
   list_objects: {
     description: 'List already-loaded objects in a scene (shallow). Objects whose children have not been loaded yet will show childCount: -1. Use get_object to load a specific object and its children, or find_objects to deep-search.',
     inputSchema: z.object({
-      scopeId: z.string().describe('Object ID to scope the listing to. Typically a scene root from list_scenes, but can be any object. (e.g., "physical:1", "terrestrial:3")'),
+      ...scopeTargetParams,
+      anchorObjectId: z.string().describe('Object ID to scope the listing to. Typically a scene root from list_scenes, but can be any object. (e.g., "physical:1", "terrestrial:3")'),
       filter: z.object({
         namePattern: z.string().optional().describe('Regex pattern to filter by name (client-side, applied to cached objects)'),
         type: z.string().optional().describe('Filter by class ("terrestrial") or by class:subtype ("terrestrial:parcel")'),
@@ -20,6 +31,7 @@ export const objectTools = {
   get_object: {
     description: 'Get full details of a specific object',
     inputSchema: z.object({
+      ...scopeTargetParams,
       objectId: z.string().describe('ID of the object (e.g., "physical:42", "terrestrial:3")'),
     }),
   },
@@ -31,6 +43,7 @@ export const objectTools = {
       ...transformFields,
       ...celestialFields,
       objectType: objectTypeSchema.optional().describe('Object type in "class:subtype" format. Examples: "terrestrial:sector", "terrestrial:parcel", "celestial:planet", "physical:transport". Defaults to "physical" when omitted. Use parentId "root" to create under RMRoot.'),
+      ...scopeTargetParams,
     }),
   },
   update_object: {
@@ -40,33 +53,59 @@ export const objectTools = {
       name: z.string().optional().describe('New name'),
       ...transformFields,
       ...celestialFields,
+      ...scopeTargetParams,
     }),
   },
   delete_object: {
     description: 'Delete an object and its children. The object class is derived from the prefixed ID.',
     inputSchema: z.object({
+      ...scopeTargetParams,
       objectId: z.string().describe('ID of the object to delete (e.g., "physical:42", "terrestrial:3")'),
     }),
   },
   move_object: {
     description: 'Reparent an object to a new parent',
     inputSchema: z.object({
+      ...scopeTargetParams,
       objectId: z.string().describe('ID of the object to move (e.g., "physical:42")'),
       newParentId: z.string().describe('ID of the new parent object (e.g., "terrestrial:3")'),
+    }),
+  },
+  find_objects: {
+    description: 'Search for objects by name pattern, position radius, or resource URL using an in-scope anchor object ID.',
+    inputSchema: z.object({
+      ...scopeTargetParams,
+      anchorObjectId: z.string().describe('Object ID to scope the search to.'),
+      query: z.object({
+        namePattern: z.string().optional().describe('Name prefix to search for (begins-with matching, case-insensitive)'),
+        positionRadius: z.object({
+          center: vector3Schema,
+          radius: z.number(),
+        }).optional(),
+        resourceUrl: z.string().optional().describe('Match objects with this resource URL'),
+      }),
+      offset: z.number().optional().describe('Skip first N results (default: 0)'),
+      limit: z.number().optional().describe('Max results to return (default: 10)'),
     }),
   },
 };
 
 export async function handleListObjects(
   client: IManifolderPromiseClient,
-  args: { scopeId: string; filter?: { namePattern?: string; type?: string }; offset?: number; limit?: number }
+  args: { scopeId?: string; profile?: string; url?: string; anchorObjectId: string; filter?: { namePattern?: string; type?: string }; offset?: number; limit?: number }
 ): Promise<string> {
-  const objects = await client.listObjects(args.scopeId, args.filter);
-  const items = objects.map(obj => ({
-    id: obj.id,
-    name: obj.name,
-    parentId: obj.parentId,
-    childCount: obj.children === null ? -1 : obj.children.length,
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: true,
+    isCUD: false,
+  });
+  const objects = await mcpClient.listObjects({
+    scopeId: target.scopeId,
+    anchorObjectId: args.anchorObjectId,
+    filter: args.filter,
+  }) as FabricObject[];
+  const items = objects.map((obj) => ({
+    ...shapeObjectResponse(target.scopeId, obj),
     hasResource: !!obj.resourceReference,
   }));
   return JSON.stringify(paginate(items, args.offset, args.limit));
@@ -74,66 +113,102 @@ export async function handleListObjects(
 
 export async function handleGetObject(
   client: IManifolderPromiseClient,
-  args: { objectId: string }
+  args: { scopeId?: string; profile?: string; url?: string; objectId: string }
 ): Promise<string> {
-  const obj = await client.getObject(args.objectId);
-
-  const result: Record<string, any> = {
-    id: obj.id,
-    name: obj.name,
-    parentId: obj.parentId,
-    position: obj.transform.position,
-    rotation: obj.transform.rotation,
-    scale: obj.transform.scale,
-    resourceReference: obj.resourceReference,
-    resourceName: obj.resourceName,
-    bound: obj.bound,
-    childCount: obj.children === null ? -1 : obj.children.length,
-    children: obj.children,
-  };
-  if (obj.orbit) result.orbit = obj.orbit;
-  if (obj.properties) result.properties = obj.properties;
-  return JSON.stringify(result);
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: true,
+    isCUD: false,
+  });
+  const obj = await mcpClient.getObject({ scopeId: target.scopeId, objectId: args.objectId }) as FabricObject;
+  return JSON.stringify(shapeObjectResponse(target.scopeId, obj));
 }
 
 export async function handleCreateObject(
   client: IManifolderPromiseClient,
-  args: Omit<CreateObjectParams, 'skipParentRefetch'>
+  args: Omit<CreateObjectParams, 'skipParentRefetch'> & { scopeId?: string; profile?: string; url?: string }
 ): Promise<string> {
-  const obj = await client.createObject(args);
-  return JSON.stringify({ id: obj.id, name: obj.name, parentId: obj.parentId });
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: false,
+    isCUD: true,
+  });
+  const createArgs = stripScopeTarget(args);
+  const obj = await mcpClient.createObject({ scopeId: target.scopeId, ...createArgs }) as FabricObject;
+  return JSON.stringify(shapeObjectResponse(target.scopeId, obj));
 }
 
 export async function handleUpdateObject(
   client: IManifolderPromiseClient,
-  args: Omit<UpdateObjectParams, 'skipRefetch'>
+  args: Omit<UpdateObjectParams, 'skipRefetch'> & { scopeId?: string; profile?: string; url?: string }
 ): Promise<string> {
-  const updated: string[] = [];
-  if (args.name !== undefined) updated.push('name');
-  if (args.position !== undefined) updated.push('position');
-  if (args.rotation !== undefined) updated.push('rotation');
-  if (args.scale !== undefined) updated.push('scale');
-  if (args.resourceReference !== undefined) updated.push('resourceReference');
-  if (args.resourceName !== undefined) updated.push('resourceName');
-  if (args.bound !== undefined) updated.push('bound');
-  if (args.orbit !== undefined) updated.push('orbit');
-  if (args.properties !== undefined) updated.push('properties');
-  await client.updateObject(args);
-  return JSON.stringify({ id: args.objectId, updated });
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: false,
+    isCUD: true,
+  });
+  const updateArgs = stripScopeTarget(args);
+  const obj = await mcpClient.updateObject({ scopeId: target.scopeId, ...updateArgs }) as FabricObject;
+  return JSON.stringify(shapeObjectResponse(target.scopeId, obj));
 }
 
 export async function handleDeleteObject(
   client: IManifolderPromiseClient,
-  args: { objectId: string }
+  args: { scopeId?: string; profile?: string; url?: string; objectId: string }
 ): Promise<string> {
-  await client.deleteObject(args.objectId);
-  return JSON.stringify({ success: true, deletedObjectId: args.objectId });
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: false,
+    isCUD: true,
+  });
+  await mcpClient.deleteObject({ scopeId: target.scopeId, objectId: args.objectId });
+  return JSON.stringify({ success: true, scopeId: target.scopeId, deletedObjectId: args.objectId });
 }
 
 export async function handleMoveObject(
   client: IManifolderPromiseClient,
-  args: { objectId: string; newParentId: string }
+  args: { scopeId?: string; profile?: string; url?: string; objectId: string; newParentId: string }
 ): Promise<string> {
-  await client.moveObject(args.objectId, args.newParentId);
-  return JSON.stringify({ id: args.objectId, newParentId: args.newParentId });
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: false,
+    isCUD: true,
+  });
+  const moved = await mcpClient.moveObject({
+    scopeId: target.scopeId,
+    objectId: args.objectId,
+    newParentId: args.newParentId,
+  }) as FabricObject;
+  return JSON.stringify(shapeObjectResponse(target.scopeId, moved));
+}
+
+export async function handleFindObjects(
+  client: IManifolderPromiseClient,
+  args: {
+    scopeId?: string;
+    profile?: string;
+    url?: string;
+    anchorObjectId: string;
+    query: {
+      namePattern?: string;
+      positionRadius?: { center: { x: number; y: number; z: number }; radius: number };
+      resourceUrl?: string;
+    };
+    offset?: number;
+    limit?: number;
+  }
+): Promise<string> {
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: true,
+    isCUD: false,
+  });
+  const objects = await mcpClient.findObjects({
+    scopeId: target.scopeId,
+    anchorObjectId: args.anchorObjectId,
+    query: args.query,
+  }) as FabricObject[];
+  const items = objects.map((obj) => shapeObjectResponse(target.scopeId, obj));
+  const result = paginate(items, args.offset, args.limit);
+  return JSON.stringify(result);
 }

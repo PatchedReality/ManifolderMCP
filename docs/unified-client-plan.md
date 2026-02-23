@@ -1,17 +1,26 @@
 # Plan: Unified Manifolder Client
 
+## Status
+
+Legacy/historical document retained for context. It is not the normative contract for current multi-scope behavior.
+
+Normative sources:
+- `ATTACHMENT_POINT_CROSS_STACK_PLAN.md`
+- `MANIFOLDERCLIENT_SCOPE_NATIVE_API_DIFF_CHECKLIST.md`
+- `ManifolderMCP/docs/attachment-multiscope-api-spec.md`
+
 ## Context
 
-`fabric-mcp/src/client/ManifolderClient.js` (Node.js) and `Manifolder/client/js/ManifolderClient.js` (browser) both extend `MV.MVMF.NOTIFICATION` and interact with Fabric scenes. They serve two consumption patterns:
+`ManifolderMCP/src/client/ManifolderClient.js` (Node.js) and `Manifolder/client/js/ManifolderClient.js` (browser) both extend `MV.MVMF.NOTIFICATION` and interact with Fabric scenes. They serve two consumption patterns:
 
 - **Subscription-based (push)**: Attach to models, receive notifications. Manifolder uses this for live scene rendering, and will extend it with fire-and-forget editing.
-- **Promise-based (pull)**: Call a method, await a typed result. fabric-mcp uses this for MCP tool request-response.
+- **Promise-based (pull)**: Call a method, await a typed result. ManifolderMCP uses this for MCP tool request-response.
 
 These patterns are orthogonal — a single class can implement both, exposing two contract surfaces (`IManifolderSubscriptionClient` and `IManifolderPromiseClient`) documented via JSDoc typedefs in one JavaScript file.
 
 ## Current Progress (2026-02-19)
 
-### Completed in `fabric-mcp`
+### Completed in `ManifolderMCP`
 
 - Unified client implemented at `src/client/ManifolderClient.js` with both contract surfaces:
   - `IManifolderSubscriptionClient`
@@ -34,7 +43,7 @@ These patterns are orthogonal — a single class can implement both, exposing tw
   - CUD waits for model notifications to confirm mutation success.
   - No refresh fallback is used in CUD paths.
 - Canonical sync executed: `../Manifolder/client/js/ManifolderClient.js` and `src/client/ManifolderClient.js` are currently identical.
-- Cross-repo client tests currently pass in both repos (`npm test` in `fabric-mcp` and `Manifolder/client`).
+- Cross-repo client tests currently pass in both repos (`npm test` in `ManifolderMCP` and `Manifolder/client`).
 - Manifolder app consumption updated to subscription factory + `connect`:
   - `../Manifolder/client/js/app.js` imports `createManifolderSubscriptionClient()`
   - map load path now calls `client.connect(url)` (no `loadMap`).
@@ -78,7 +87,7 @@ These patterns are orthogonal — a single class can implement both, exposing tw
 
 ### Session Handoff Notes
 
-- Canonical source remains `../Manifolder/client/js/ManifolderClient.js`; `fabric-mcp/src/client/ManifolderClient.js` is a synced copy.
+- Canonical source remains `../Manifolder/client/js/ManifolderClient.js`; `ManifolderMCP/src/client/ManifolderClient.js` is a synced copy.
 - Preferred write-confirmation strategy is **notification-first**; targeted refresh is currently fallback-only on notification timeout.
 - `list_objects` behavior should remain unchanged: list loaded subtree under `scopeId` (including `scopeId`) without forcing deep loads.
 - Global Codex MCP server `fabric` is configured via `~/.codex/config.toml` (`[mcp_servers.fabric]`).
@@ -89,7 +98,7 @@ These patterns are orthogonal — a single class can implement both, exposing tw
 Both clients already use the MVMF model layer (`Model_Open`, `model.Request(action)`, `pIAction.Send`). Neither hits raw IO protocol directly. The difference is:
 
 - **Manifolder** uses the model layer idiomatically: open models, attach, receive notifications via `onInserted`/`onUpdated`/`onChanged`/`onDeleting`. The MVMF model graph *is* the cache.
-- **fabric-mcp** uses the model layer for action sending, but reimplements everything else: maintains its own `objectCache: Map`, manually constructs `FabricObject` from model fields, manually tracks what's open and ready.
+- **ManifolderMCP** uses the model layer for action sending, but reimplements everything else: maintains its own `objectCache: Map`, manually constructs `FabricObject` from model fields, manually tracks what's open and ready.
 
 **The unified client uses Manifolder's model-layer approach as the foundation.** The MVMF model graph is the single source of truth.
 
@@ -151,7 +160,7 @@ The unified client adds write methods that encapsulate `Request`/`Send` + payloa
 │              ▼                               ▼                   │
 │  ┌──────────────────────┐  ┌──────────────────────────────────┐ │
 │  │  IManifolderSubscriptionClient │  │  IManifolderPromiseClient                   │ │
-│  │  (Manifolder)        │  │  (fabric-mcp)                    │ │
+│  │  (Manifolder)        │  │  (ManifolderMCP)                    │ │
 │  │                      │  │                                  │ │
 │  │  openModel()         │  │  getObject()                     │ │
 │  │  closeModel()        │  │  listObjects()                   │ │
@@ -200,11 +209,11 @@ These internal methods own all `Request`/`Send` interaction. No code outside thi
 - Wraps `Send(this, callback)` in a promise with timeout
 - All CRUD methods and SEARCH actions delegate here
 
-### What goes away from fabric-mcp
+### What goes away from ManifolderMCP
 
-fabric-mcp's former `MVFabricClient.ts` implementation reimplements several things the model layer provides:
+ManifolderMCP's former `MVFabricClient.ts` implementation reimplements several things the model layer provides:
 
-| fabric-mcp reimplements | Model layer provides |
+| ManifolderMCP reimplements | Model layer provides |
 |---|---|
 | `objectCache: Map<string, any>` + manual insert/evict | MVMF model graph — opened models stay live, updated via notifications |
 | `openAndWait()` / `waitForReady()` polling | `Model_Open` + `onReadyState` notification |
@@ -227,7 +236,7 @@ createManifolderPromiseClient(): IManifolderPromiseClient
 
 ```
 IManifolderSubscriptionClient          IManifolderPromiseClient
-(Manifolder uses this)       (fabric-mcp uses this)
+(Manifolder uses this)       (ManifolderMCP uses this)
 ─────────────────────        ─────────────────────
 on(event, handler)           listScenes()
 off(event, handler)          openScene(id)
@@ -254,7 +263,7 @@ The unified implementation must preserve these behaviors from current consumers:
 3. **Factory-only public API**: consumers construct clients only through `createManifolderSubscriptionClient()` or `createManifolderPromiseClient()`; `ManifolderClient` is internal.
 4. **One consumer, one surface**: Manifolder exclusively uses `IManifolderSubscriptionClient`; MCP exclusively uses `IManifolderPromiseClient`.
 5. **Drop `loadMap` from the interface contract**: Manifolder uses `connect` directly for map loading.
-6. **Per-repo copies with one canonical owner**: both repos keep their own `ManifolderClient.js` copy, but the canonical source is Manifolder (for now). fabric-mcp syncs from that canonical file.
+6. **Per-repo copies with one canonical owner**: both repos keep their own `ManifolderClient.js` copy, but the canonical source is Manifolder (for now). ManifolderMCP syncs from that canonical file.
 7. **No client-side admin gate on CRUD**: connection without `adminKey` (MSF scene-root mode) may still call CRUD APIs; authorization is enforced by the Fabric server.
 8. **`listObjects` is part of Layer 3**: it remains a first-class direct API method.
 9. **`_sendAction` is the only `Send()` call site**: this includes SEARCH action dispatch.
@@ -270,7 +279,7 @@ Manifolder/
   client/js/ManifolderClient.js          # Canonical unified client source (class + constants + helpers + JSDoc typedefs)
   client/js/ManifolderClient.test.js     # Canonical unit/integration tests for unified client
 
-fabric-mcp/
+ManifolderMCP/
   src/client/ManifolderClient.js         # Synced copy of canonical source
   src/client/ManifolderClient.d.ts       # Generated typings for TS consumers
 ```
@@ -278,7 +287,7 @@ fabric-mcp/
 ### MVMF Vendor Libraries — Stay in Each Project
 
 The vendor libs stay where they are. Each project loads them its own way:
-- fabric-mcp: Node.js shims (`node-shim.js`) + ESM imports
+- ManifolderMCP: Node.js shims (`node-shim.js`) + ESM imports
 - Manifolder: `<script>` tags in HTML
 
 The shared file assumes `globalThis.MV` is already set up.
@@ -293,7 +302,7 @@ The canonical source file declares JSDoc typedefs for:
 - `FabricObject`, `Scene`, `SearchQuery`, `ObjectFilter`, `BulkOperation`
 - `ConnectOptions`, `ConnectResult`, `ConnectionStatus`
 
-`src/client/ManifolderClient.d.ts` in fabric-mcp is generated from the canonical JSDoc and is not hand-edited.
+`src/client/ManifolderClient.d.ts` in ManifolderMCP is generated from the canonical JSDoc and is not hand-edited.
 
 ### Unified Client Class — Layered Architecture
 
@@ -346,7 +355,7 @@ Both interfaces use these methods:
 | `findObjects(sceneId, query)` | Uses `searchNodes` (model-layer search) → `_toFabricObject` each result |
 | `bulkUpdate(ops)` | Batched calls to `createObject`/`updateObject`/`deleteObject`/`moveObject` with concurrency control; best-effort partial success, no rollback |
 
-**`_openAndReady` helper**: calls `Model_Open`, attaches if needed, returns a promise that resolves when `onReadyState` fires with `READY`. This replaces fabric-mcp's `openAndWait`/`waitForReady` polling with the notification-driven pattern MVClient already uses.
+**`_openAndReady` helper**: calls `Model_Open`, attaches if needed, returns a promise that resolves when `onReadyState` fires with `READY`. This replaces ManifolderMCP's `openAndWait`/`waitForReady` polling with the notification-driven pattern MVClient already uses.
 
 **Notification handlers do double duty:**
 ```javascript
@@ -373,7 +382,7 @@ onInserted(pNotice) {
 
 ## Changes to Consuming Projects
 
-### fabric-mcp
+### ManifolderMCP
 
 1. Replace `src/client/MVFabricClient.ts` with `src/client/ManifolderClient.js` (synced copy from canonical Manifolder source).
 2. Generate `src/client/ManifolderClient.d.ts` from canonical JSDoc for TypeScript tooling.
@@ -381,7 +390,7 @@ onInserted(pNotice) {
    - `import { createManifolderPromiseClient } from './client/ManifolderClient.js'` (or `./client/index.js`)
    - instantiate once: `const client = createManifolderPromiseClient()`
 4. Remove duplicate local constants/helpers/types that are now exported from `src/client/ManifolderClient.js`.
-5. Keep fabric-mcp-specific code: vendor shims (`src/vendor/`), MCP tool handlers, config, storage, and error translation.
+5. Keep ManifolderMCP-specific code: vendor shims (`src/vendor/`), MCP tool handlers, config, storage, and error translation.
 6. Keep existing MCP tool API surface unchanged (`list_scenes`, `open_scene`, `create_object`, etc.); only the underlying client implementation is swapped.
 
 ### Manifolder
@@ -397,7 +406,7 @@ onInserted(pNotice) {
 
 ### Source Synchronization Rule
 
-Only `../Manifolder/client/js/ManifolderClient.js` is edited manually (canonical source). `fabric-mcp/src/client/ManifolderClient.js` is synced from it via script. Add sync scripts in both repos and fail CI if files drift.
+Only `../Manifolder/client/js/ManifolderClient.js` is edited manually (canonical source). `ManifolderMCP/src/client/ManifolderClient.js` is synced from it via script. Add sync scripts in both repos and fail CI if files drift.
 
 ## Implementation Order
 
@@ -411,9 +420,9 @@ Only `../Manifolder/client/js/ManifolderClient.js` is edited manually (canonical
 8. Add/verify canonical tests in Manifolder against this source.
 9. Expand unit tests to cover full `IManifolder*` surface through interface contracts.
 10. Add record/replay fixture flow for live response capture and mock-shape validation.
-11. Sync canonical source into `fabric-mcp/src/client/ManifolderClient.js`.
-12. Generate/update `fabric-mcp/src/client/ManifolderClient.d.ts` from canonical JSDoc.
-13. Wire `fabric-mcp` imports to local synced JS module and remove old TS client implementation.
+11. Sync canonical source into `ManifolderMCP/src/client/ManifolderClient.js`.
+12. Generate/update `ManifolderMCP/src/client/ManifolderClient.d.ts` from canonical JSDoc.
+13. Wire `ManifolderMCP` imports to local synced JS module and remove old TS client implementation.
 14. Add drift-check + test steps in CI for both repos.
 
 ## Automated Test Suite
@@ -434,7 +443,7 @@ Only `../Manifolder/client/js/ManifolderClient.js` is edited manually (canonical
   - `bulkUpdate` partial-success semantics and aggregated error reporting
   - search behavior (supported vs unavailable SEARCH actions)
 
-### fabric-mcp Compatibility Tests
+### ManifolderMCP Compatibility Tests
 
 - Tool-handler contract tests with mocked client transport:
   - `connection`, `scene`, `object`, and `bulk` handlers preserve current JSON response shapes
@@ -452,15 +461,15 @@ Only `../Manifolder/client/js/ManifolderClient.js` is edited manually (canonical
 
 ### CI Gates
 
-- Canonical Manifolder client tests must pass before syncing to fabric-mcp.
-- Drift check (`Manifolder canonical` vs `fabric-mcp synced copy`) must pass before merge.
-- fabric-mcp compatibility/unit tests must pass before merge.
+- Canonical Manifolder client tests must pass before syncing to ManifolderMCP.
+- Drift check (`Manifolder canonical` vs `ManifolderMCP synced copy`) must pass before merge.
+- ManifolderMCP compatibility/unit tests must pass before merge.
 - Manifolder compatibility/unit tests (or smoke test) must pass before merge.
 - Live integration/recording/write tests are excluded from CI and run manually only.
 
 ## Verification
 
-- **fabric-mcp**: `fabric_connect` (earth profile) → `list_scenes` → `create_scene` → `open_scene` → `create_object` → `update_object` → `delete_object` → `find_objects` → `bulk_update` → `delete_scene` → `fabric_disconnect`
+- **ManifolderMCP**: `fabric_connect` (earth profile) → `list_scenes` → `create_scene` → `open_scene` → `create_object` → `update_object` → `delete_object` → `find_objects` → `bulk_update` → `delete_scene` → `fabric_disconnect`
 - **Manifolder**: Open in browser → load MSF URL → hierarchy tree populates → search returns results → clicking nodes loads children → live updates render
 - **Both**: `disconnect` tears down cleanly without errors or leaked listeners
 - **Automated**: all shared + consumer compatibility tests pass in CI

@@ -1,149 +1,104 @@
 import { z } from 'zod';
 import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
-import { objectTypeSchema } from './schemas.js';
-import { paginate } from '../output.js';
-import { getProfile } from '../config.js';
-import { handleFabricConnect } from './connection.js';
+import type { FabricObject, Scene } from '../types.js';
 import { parseObjectRef } from '../types.js';
-
-const autoConnectParams = {
-  profile: z.string().optional().describe('Config profile name (e.g., "earth", "default"). Auto-connects if not already connected.'),
-  url: z.string().optional().describe('Direct fabric URL for anonymous connection. Auto-connects if not already connected.'),
-};
+import { objectTypeSchema, scopeTargetParams } from './schemas.js';
+import { paginate } from '../output.js';
+import { resolveScopeTarget } from './scope-target.js';
+import { shapeObjectResponse, shapeSceneSummary } from './response-shapers.js';
+import { asMCPClient } from './mcp-client.js';
 
 export const sceneTools = {
   list_scenes: {
-    description: 'List all scenes in the Fabric. Accepts optional profile or url to auto-connect if not already connected. Always display the url field in results.',
+    description: 'List all scenes in a scope. Provide one scope target (`scopeId` | `profile` | `url`) or rely on read fallback when a single connected root scope exists.',
     inputSchema: z.object({
       offset: z.number().optional().describe('Skip first N results (default: 0)'),
       limit: z.number().optional().describe('Max results to return (default: 10)'),
-      ...autoConnectParams,
+      ...scopeTargetParams,
     }),
   },
   open_scene: {
-    description: 'Load a scene and return the object tree summary. Accepts optional profile or url to auto-connect if not already connected.',
+    description: 'Load a scene and return the same payload shape as get_object for the opened root, plus url.',
     inputSchema: z.object({
       sceneId: z.string().describe('ID of the scene to open (e.g., "physical:1", "terrestrial:3")'),
-      ...autoConnectParams,
+      ...scopeTargetParams,
     }),
   },
   create_scene: {
-    description: 'Create a new empty scene. Accepts optional profile or url to auto-connect if not already connected.',
+    description: 'Create a new empty scene in the resolved scope.',
     inputSchema: z.object({
       name: z.string().describe('Name for the new scene'),
       objectType: objectTypeSchema.optional().describe('Object type for the scene root. Examples: "terrestrial:sector", "celestial:planet". Defaults to "physical" when omitted.'),
-      ...autoConnectParams,
+      ...scopeTargetParams,
     }),
   },
   delete_scene: {
-    description: 'Delete a scene and all its children. Accepts optional profile or url to auto-connect if not already connected.',
+    description: 'Delete a scene and all its children in the resolved scope.',
     inputSchema: z.object({
       sceneId: z.string().describe('ID of the scene to delete (e.g., "physical:1", "terrestrial:3")'),
-      ...autoConnectParams,
+      ...scopeTargetParams,
     }),
   },
 };
 
-async function ensureConnection(
-  client: IManifolderPromiseClient,
-  args: { profile?: string; url?: string }
-): Promise<void> {
-  const status = client.getStatus();
-
-  if (status.connected) {
-    const alreadyOnTarget = await isAlreadyConnected(status, args);
-    if (alreadyOnTarget) return;
-  }
-
-  if (args.profile || args.url) {
-    await handleFabricConnect(client, { profile: args.profile, url: args.url });
-    return;
-  }
-
-  if (!status.connected) {
-    throw new Error('Not connected to a Fabric server. Provide a profile or url to auto-connect, or call fabric_connect first.');
-  }
-}
-
-async function isAlreadyConnected(
-  status: { fabricUrl: string | null },
-  args: { profile?: string; url?: string }
-): Promise<boolean> {
-  if (args.profile) {
-    const profile = await getProfile(args.profile);
-    return status.fabricUrl === profile.fabricUrl;
-  }
-  if (args.url) {
-    return status.fabricUrl === args.url;
-  }
-  return true;
-}
-
 export async function handleListScenes(
   client: IManifolderPromiseClient,
-  args: { offset?: number; limit?: number; profile?: string; url?: string }
+  args: { offset?: number; limit?: number; scopeId?: string; profile?: string; url?: string }
 ): Promise<string> {
-  await ensureConnection(client, args);
-  const scenes = await client.listScenes();
-  const rootUrl = client.getResourceRootUrl();
-  const items = scenes.map(s => {
-    let url: string | undefined;
-    if (rootUrl) {
-      const { classId, numericId } = parseObjectRef(s.id);
-      url = `${rootUrl}/fabric/${classId}/${numericId}`;
-    }
-    return { id: s.id, name: s.name, url };
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: true,
+    isCUD: false,
   });
+  const scenes = await mcpClient.listScenes({ scopeId: target.scopeId }) as Scene[];
+  const rootUrl = mcpClient.getResourceRootUrl({ scopeId: target.scopeId });
+  const items = scenes.map((scene) => shapeSceneSummary(target.scopeId, scene, rootUrl));
   return JSON.stringify(paginate(items, args.offset, args.limit));
 }
 
 export async function handleOpenScene(
   client: IManifolderPromiseClient,
-  args: { sceneId: string; profile?: string; url?: string }
+  args: { sceneId: string; scopeId?: string; profile?: string; url?: string }
 ): Promise<string> {
-  await ensureConnection(client, args);
-  const root = await client.openScene(args.sceneId);
-  const childCount = root.children === null ? -1 : root.children.length;
-
-  let children: Array<{ id: string; name: string; hasResource: boolean }> | undefined;
-  if (root.children && root.children.length > 0) {
-    const childDetails = await Promise.all(
-      root.children.map(id => client.getObject(id).catch(() => null))
-    );
-    children = childDetails
-      .filter((c): c is NonNullable<typeof c> => c !== null)
-      .map(c => ({ id: c.id, name: c.name, hasResource: !!c.resourceReference }));
-  }
-
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: true,
+    isCUD: false,
+  });
+  const root = await mcpClient.openScene({ scopeId: target.scopeId, sceneId: args.sceneId }) as FabricObject;
+  const rootUrl = mcpClient.getResourceRootUrl({ scopeId: target.scopeId });
+  const normalizedRoot = rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
+  const { classId, numericId } = parseObjectRef(root.id);
   return JSON.stringify({
-    sceneId: args.sceneId,
-    root: { id: root.id, name: root.name, childCount },
-    children,
+    ...shapeObjectResponse(target.scopeId, root),
+    url: `${normalizedRoot}/fabric/${classId}/${numericId}`,
   });
 }
 
 export async function handleCreateScene(
   client: IManifolderPromiseClient,
-  args: { name: string; objectType?: string; profile?: string; url?: string }
+  args: { name: string; objectType?: string; scopeId?: string; profile?: string; url?: string }
 ): Promise<string> {
-  await ensureConnection(client, args);
-  const scene = await client.createScene(args.name, args.objectType);
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: false,
+    isCUD: true,
+  });
+  const scene = await mcpClient.createScene({ scopeId: target.scopeId, name: args.name, objectType: args.objectType }) as Scene;
+  const rootUrl = mcpClient.getResourceRootUrl({ scopeId: target.scopeId });
 
-  const rootUrl = client.getResourceRootUrl();
-  let url: string | undefined;
-  if (rootUrl) {
-    const { classId, numericId } = parseObjectRef(scene.id);
-    url = `${rootUrl}/fabric/${classId}/${numericId}`;
-  }
-
-  return JSON.stringify({ scene: { ...scene, url } });
+  return JSON.stringify({ scene: shapeSceneSummary(target.scopeId, scene, rootUrl) });
 }
 
 export async function handleDeleteScene(
   client: IManifolderPromiseClient,
-  args: { sceneId: string; profile?: string; url?: string }
+  args: { sceneId: string; scopeId?: string; profile?: string; url?: string }
 ): Promise<string> {
-  await ensureConnection(client, args);
-  await client.deleteScene(args.sceneId);
-  return JSON.stringify({ success: true, deletedSceneId: args.sceneId });
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: false,
+    isCUD: true,
+  });
+  await mcpClient.deleteScene({ scopeId: target.scopeId, sceneId: args.sceneId });
+  return JSON.stringify({ success: true, scopeId: target.scopeId, deletedSceneId: args.sceneId });
 }

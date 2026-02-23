@@ -23,9 +23,11 @@ import { ScpStorage } from './storage/ScpStorage.js';
 import {
   connectionTools,
   handleListProfiles,
-  handleFabricConnect,
-  handleFabricDisconnect,
   handleFabricStatus,
+  scopeTools,
+  handleListScopes,
+  handleFollowAttachment,
+  handleCloseScope,
   sceneTools,
   handleListScenes,
   handleOpenScene,
@@ -38,9 +40,9 @@ import {
   handleUpdateObject,
   handleDeleteObject,
   handleMoveObject,
+  handleFindObjects,
   bulkTools,
   handleBulkUpdate,
-  handleFindObjects,
   resourceTools,
   handleUploadResource,
   handleListResources,
@@ -56,7 +58,9 @@ import {
   getFullActionResourceSchema,
   handleValidateActionResource,
   type ActionResourceType,
+  resolveProfileTarget,
 } from './tools/index.js';
+import { serializeToolError } from './tools/errors.js';
 
 const server = new Server(
   {
@@ -72,18 +76,30 @@ const server = new Server(
 );
 
 const client: IManifolderPromiseClient = createManifolderPromiseClient();
-let storage: ScpStorage | null = null;
+const storageByProfile = new Map<string, ScpStorage>();
 
-async function getStorage(): Promise<ScpStorage> {
-  if (!storage) {
-    const profile = await getProfile('default');
-    storage = new ScpStorage(profile);
+async function getStorage(profileName: string): Promise<ScpStorage> {
+  if (!profileName) {
+    throw new Error('profile is required');
   }
+  const existing = storageByProfile.get(profileName);
+  if (existing) {
+    return existing;
+  }
+  const profile = await getProfile(profileName);
+  const storage = new ScpStorage(profile);
+  storageByProfile.set(profileName, storage);
   return storage;
+}
+
+async function resolveResourceProfileName(args: unknown): Promise<string> {
+  const resolved = await resolveProfileTarget((args ?? {}) as Parameters<typeof resolveProfileTarget>[0]);
+  return resolved.profileName;
 }
 
 const allTools = {
   ...connectionTools,
+  ...scopeTools,
   ...sceneTools,
   ...objectTools,
   ...bulkTools,
@@ -166,14 +182,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'list_profiles':
         result = await handleListProfiles();
         break;
-      case 'fabric_connect':
-        result = await handleFabricConnect(client, args as { profile?: string; url?: string });
-        break;
-      case 'fabric_disconnect':
-        result = await handleFabricDisconnect(client);
-        break;
       case 'fabric_status':
-        result = handleFabricStatus(client);
+        result = await handleFabricStatus(client, args as Parameters<typeof handleFabricStatus>[1]);
+        break;
+
+      // Scope tools
+      case 'list_scopes':
+        result = await handleListScopes(client, args as Parameters<typeof handleListScopes>[1]);
+        break;
+      case 'follow_attachment':
+        result = await handleFollowAttachment(client, args as Parameters<typeof handleFollowAttachment>[1]);
+        break;
+      case 'close_scope':
+        result = await handleCloseScope(client, args as Parameters<typeof handleCloseScope>[1]);
         break;
 
       // Scene tools
@@ -195,7 +216,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await handleListObjects(client, args as Parameters<typeof handleListObjects>[1]);
         break;
       case 'get_object':
-        result = await handleGetObject(client, args as { objectId: string });
+        result = await handleGetObject(client, args as Parameters<typeof handleGetObject>[1]);
         break;
       case 'create_object':
         result = await handleCreateObject(client, args as Parameters<typeof handleCreateObject>[1]);
@@ -204,47 +225,74 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         result = await handleUpdateObject(client, args as Parameters<typeof handleUpdateObject>[1]);
         break;
       case 'delete_object':
-        result = await handleDeleteObject(client, args as { objectId: string });
+        result = await handleDeleteObject(client, args as Parameters<typeof handleDeleteObject>[1]);
         break;
       case 'move_object':
-        result = await handleMoveObject(client, args as { objectId: string; newParentId: string });
+        result = await handleMoveObject(client, args as Parameters<typeof handleMoveObject>[1]);
+        break;
+      case 'find_objects':
+        result = await handleFindObjects(client, args as Parameters<typeof handleFindObjects>[1]);
         break;
 
       // Bulk tools
       case 'bulk_update':
         result = await handleBulkUpdate(client, args as Parameters<typeof handleBulkUpdate>[1]);
         break;
-      case 'find_objects':
-        result = await handleFindObjects(client, args as Parameters<typeof handleFindObjects>[1]);
-        break;
 
       // Resource tools
       case 'upload_resource':
-        result = await handleUploadResource(await getStorage(), args as Parameters<typeof handleUploadResource>[1]);
+        result = await handleUploadResource(
+          await getStorage(await resolveResourceProfileName(args)),
+          args as Parameters<typeof handleUploadResource>[1]
+        );
         break;
       case 'list_resources':
-        result = await handleListResources(await getStorage(), args as Parameters<typeof handleListResources>[1]);
+        result = await handleListResources(
+          await getStorage(await resolveResourceProfileName(args)),
+          args as Parameters<typeof handleListResources>[1]
+        );
         break;
       case 'delete_resource':
-        result = await handleDeleteResource(await getStorage(), args as { resourceName: string });
+        result = await handleDeleteResource(
+          await getStorage(await resolveResourceProfileName(args)),
+          args as Parameters<typeof handleDeleteResource>[1]
+        );
         break;
       case 'move_resource':
-        result = await handleMoveResource(await getStorage(), args as { sourceName: string; destName: string });
+        result = await handleMoveResource(
+          await getStorage(await resolveResourceProfileName(args)),
+          args as Parameters<typeof handleMoveResource>[1]
+        );
         break;
       case 'bulk_upload_resources':
-        result = await handleBulkUploadResources(await getStorage(), args as Parameters<typeof handleBulkUploadResources>[1]);
+        result = await handleBulkUploadResources(
+          await getStorage(await resolveResourceProfileName(args)),
+          args as Parameters<typeof handleBulkUploadResources>[1]
+        );
         break;
       case 'bulk_delete_resources':
-        result = await handleBulkDeleteResources(await getStorage(), args as Parameters<typeof handleBulkDeleteResources>[1]);
+        result = await handleBulkDeleteResources(
+          await getStorage(await resolveResourceProfileName(args)),
+          args as Parameters<typeof handleBulkDeleteResources>[1]
+        );
         break;
       case 'bulk_move_resources':
-        result = await handleBulkMoveResources(await getStorage(), args as Parameters<typeof handleBulkMoveResources>[1]);
+        result = await handleBulkMoveResources(
+          await getStorage(await resolveResourceProfileName(args)),
+          args as Parameters<typeof handleBulkMoveResources>[1]
+        );
         break;
       case 'download_resource':
-        result = await handleDownloadResource(await getStorage(), args as { resourceName: string; localPath: string });
+        result = await handleDownloadResource(
+          await getStorage(await resolveResourceProfileName(args)),
+          args as Parameters<typeof handleDownloadResource>[1]
+        );
         break;
       case 'bulk_download_resources':
-        result = await handleBulkDownloadResources(await getStorage(), args as Parameters<typeof handleBulkDownloadResources>[1]);
+        result = await handleBulkDownloadResources(
+          await getStorage(await resolveResourceProfileName(args)),
+          args as Parameters<typeof handleBulkDownloadResources>[1]
+        );
         break;
 
       // Action resource tools
@@ -263,8 +311,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [{ type: 'text', text: result }],
     };
   } catch (error) {
+    const payload = serializeToolError(error);
     return {
-      content: [{ type: 'text', text: `Error: ${(error as Error).message}` }],
+      content: [{ type: 'text', text: JSON.stringify(payload) }],
       isError: true,
     };
   }

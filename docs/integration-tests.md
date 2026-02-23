@@ -5,6 +5,7 @@
 ## Location
 
 - `test/integration/ManifolderClient.integration.test.js`
+- `test/integration/mcp-tools-e2e.integration.test.js` (non-live MCP tool-path integration; runs in `npm test`)
 
 ## Enable Tests
 
@@ -13,6 +14,8 @@ Integration tests are skipped by default. Enable with:
 ```bash
 FABRIC_IT_ENABLED=1 npm run test:integration
 ```
+
+When `FABRIC_IT_ENABLED` is not set, the integration test files print an explicit skip diagnostic to stderr so CI logs clearly show that live coverage did not run.
 
 ## Target Selection
 

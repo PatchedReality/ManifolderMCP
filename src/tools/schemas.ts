@@ -42,6 +42,12 @@ export const celestialFields = {
   properties: celestialPropertiesSchema,
 };
 
+export const scopeTargetParams = {
+  scopeId: z.string().optional(),
+  profile: z.string().optional(),
+  url: z.string().optional(),
+};
+
 export const objectTypeSchema = z.enum([
   // Celestial subtypes (class 71)
   'celestial:universe', 'celestial:supercluster', 'celestial:galaxy_cluster',

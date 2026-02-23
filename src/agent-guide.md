@@ -8,7 +8,9 @@ All object IDs use the format `"class:id"`:
 - `"terrestrial:3"` — terrestrial object 3
 - `"physical:42"` — physical object 42
 
-This format is used everywhere: `parentId`, `objectId`, `newParentId`, `scopeId`, and in all responses.
+This format is used for object identifiers: `parentId`, `objectId`, `newParentId`, and object IDs in responses.
+
+`scopeId` is different: it identifies a fabric scope (`fs1_<sha256hex>`), not an object.
 
 ## Object Types
 
@@ -44,17 +46,18 @@ Not all object types can be nested freely. The parent's class determines which c
 
 ## Core Workflow
 
-1. **Connect** to a Fabric server (one of):
-   - **Scene tools auto-connect**: `list_scenes(profile: "earth")` — connects and lists in one call. All scene tools (`list_scenes`, `open_scene`, `create_scene`, `delete_scene`) accept optional `profile` or `url` params to auto-connect if not already connected.
-   - **Explicit connect**: `fabric_connect(profile: "earth")` — uses a pre-configured profile with credentials
-   - **By URL**: `fabric_connect(url: "https://example.com/fabric/72/1")` — anonymous read-only connection
-   - Use `list_profiles` if you don't know which profiles are available
-   - Auto-connect via `profile` or `url` establishes a persistent connection — subsequent tool calls don't need to repeat the profile. Only one connection at a time; passing a different profile switches the connection.
-2. **List scenes**: `list_scenes` → returns all scenes on the server
-3. **Open a scene**: `open_scene(sceneId: "physical:1")` → loads the scene tree and returns `{ sceneId, root: {id, name, childCount}, children }`
+1. **Resolve a scope target** on each scene/object call:
+   - pass exactly one of `scopeId`, `profile`, or `url`
+   - `profile` / `url` auto-connect and resolve to a deterministic root `scopeId`
+   - read/status calls may omit target only when exactly one connected root scope exists
+2. **List scenes**: `list_scenes` → returns scenes with `scopeId` and `url`
+3. **Open a scene**: `open_scene(sceneId: "physical:1", scopeId: "...")` → returns `get_object`-equivalent root payload plus `url`
 4. **Work with objects**: create, update, delete, move, search
-5. **Check status**: `fabric_status` → current connection state and scene info
-6. **Disconnect**: `fabric_disconnect` → close connection when done
+5. **Traverse attachments**: An object becomes attachment-capable when its `resourceReference` points to a child scene's fabric URL. Typical sequence:
+   1. `create_scene(name: "child scene")` → returns `{ url }` (the fabric URL)
+   2. `update_object(objectId: "terrestrial:3", resourceReference: "<url from create_scene>")` — link the parcel to the child scene
+   3. `follow_attachment(scopeId, objectId: "terrestrial:3")` → opens the child scope and returns `{ childScopeId, childFabricUrl }`
+6. **Check scopes/status**: `list_scopes`, `fabric_status`
 
 ## Object Manipulation
 
@@ -127,17 +130,17 @@ Reparents the object under a new parent.
 ### Inspecting Objects
 
 - `get_object(objectId: "physical:42")` — returns full details: id, name, parentId, position, resourceReference, children
-- `list_objects(scopeId: "physical:1")` — shallow list of loaded objects under the scoped object. Supports optional `filter` with `namePattern` (regex) and `type`. `scopeId` is typically a scene root from `list_scenes`, but can be any object.
+- `list_objects(scopeId: "...", anchorObjectId: "physical:1")` — shallow list under an in-scope anchor object. Supports optional `filter` with `namePattern` (regex) and `type`.
 - `childCount: -1` means the object's children haven't been loaded from the server yet. Call `get_object` on it to load its children. After that, its children will appear in `list_objects`.
 
 ### Searching Objects
 
-`find_objects` searches by name, position, or resource URL. `scopeId` is typically a scene root, but can be any object:
+`find_objects` searches by name, position, or resource URL using an in-scope anchor object:
 
 ```
-find_objects(scopeId: "physical:1", query: { namePattern: "Tree" })
-find_objects(scopeId: "terrestrial:3", query: { positionRadius: { center: {x:0, y:0, z:0}, radius: 50 } })
-find_objects(scopeId: "physical:1", query: { resourceUrl: "Forest.glb" })
+find_objects(scopeId: "...", anchorObjectId: "physical:1", query: { namePattern: "Tree" })
+find_objects(scopeId: "...", anchorObjectId: "terrestrial:3", query: { positionRadius: { center: {x:0, y:0, z:0}, radius: 50 } })
+find_objects(scopeId: "...", anchorObjectId: "physical:1", query: { resourceUrl: "Forest.glb" })
 ```
 
 **How `namePattern` works:** On celestial and terrestrial scopes, `namePattern` is sent to the server as a begins-with prefix match (case-insensitive, efficient). On physical scopes, server-side SEARCH is not available — `namePattern` falls back to loading the full subtree under the scoped object and applying a client-side regex filter. Non-text queries (`positionRadius`, `resourceUrl`) always use client-side filtering on the loaded subtree.
@@ -146,10 +149,10 @@ find_objects(scopeId: "physical:1", query: { resourceUrl: "Forest.glb" })
 
 A scene is a top-level object directly under `"root"`. `list_scenes` returns all direct children of root. `create_scene` creates an object under root (physical by default, or specify `objectType`). The scene ID is the same as its root object's ID — you can manipulate the scene root with object tools like `update_object`.
 
-- `list_scenes` — list all scenes (paginated). Accepts optional `profile` or `url` to auto-connect. Always show the `url` field when displaying results. The `url` field is the browser-viewable URL for the scene on the Fabric server.
-- `open_scene(sceneId: "physical:1")` — load a scene and its direct children; returns root info and child summaries. After this call, `list_objects` will show the full first level immediately. Accepts optional `profile` or `url` to auto-connect.
-- `create_scene(name: "My Scene")` — create a new empty scene. Accepts optional `profile` or `url` to auto-connect.
-- `delete_scene(sceneId: "physical:1")` — delete a scene and all its children. Accepts optional `profile` or `url` to auto-connect.
+- `list_scenes(scopeId|profile|url)` — list scenes (paginated) in resolved scope.
+- `open_scene(sceneId, scopeId|profile|url)` — load scene and return `get_object`-equivalent root fields plus `url`.
+- `create_scene(name, scopeId|profile|url)` — create scene (explicit target required).
+- `delete_scene(sceneId, scopeId|profile|url)` — delete scene (explicit target required).
 
 ## Resource Management
 
@@ -296,16 +299,16 @@ bulk_update(operations: [
 ])
 ```
 
-Returns `createdIds` for any created objects (prefixed, e.g., `"physical:200"`). On partial failure, continues executing and reports errors in the `errors` array — check `failed > 0`.
+`bulk_update` input is `scopeBatches: [{ scopeId, operations }]`. Response codes: `CROSS_SCOPE_PARTIAL_FAILURE` (mixed), `CROSS_SCOPE_FAILURE` (all failed), `OK` (all succeeded).
 
 ### Bulk Resource Operations
 
 For efficiency when working with multiple files, use the bulk variants:
 
-- `bulk_upload_resources(files: [...])` — upload multiple files in one connection
-- `bulk_download_resources(downloads: [...])` — download multiple files in one connection
-- `bulk_delete_resources(resourceNames: [...])` — delete multiple files in one connection
-- `bulk_move_resources(moves: [...])` — move/rename multiple files in one connection
+- `bulk_upload_resources(profile: "...", files: [...])`
+- `bulk_download_resources(profile: "...", downloads: [...])`
+- `bulk_delete_resources(profile: "...", resourceNames: [...])`
+- `bulk_move_resources(profile: "...", moves: [...])`
 
 Bulk resource operations report failures in a `failedItems` array.
 
@@ -316,7 +319,7 @@ Tools that return lists (`list_scenes`, `list_objects`, `find_objects`, `list_re
 ```
 list_scenes(offset: 0, limit: 20)                      // first 20 scenes
 list_scenes(offset: 20, limit: 20)                      // next 20 scenes
-list_objects(scopeId: "physical:1", limit: 50)           // first 50 objects
+list_objects(scopeId: "...", anchorObjectId: "physical:1", limit: 50) // first 50 objects
 ```
 
 Default page size is 10. Use `total` to determine if more pages exist.
@@ -327,8 +330,8 @@ Fabric scenes and resource libraries can be large — hundreds of objects per sc
 
 **Prefer filtered queries over full listings:**
 - `list_resources(path: "Forest/Trees", filter: "Oak*")` instead of `list_resources(recursive: true)`
-- `find_objects(query: { namePattern: "Birch" })` instead of `find_objects(scopeId: ..., query: {})` — an empty or overly broad query loads the full subtree
-- `list_objects(filter: { namePattern: "Tree" })` instead of `list_objects(limit: 1000)`
+- `find_objects(scopeId: "...", anchorObjectId: "...", query: { namePattern: "Birch" })` instead of broad subtree scans
+- `list_objects(scopeId: "...", anchorObjectId: "...", filter: { namePattern: "Tree" })` instead of `limit: 1000`
 
 **Use small page sizes when exploring:**
 - Start with the default limit (10) to understand the data shape before requesting more
@@ -339,7 +342,7 @@ Fabric scenes and resource libraries can be large — hundreds of objects per sc
 - `list_resources(recursive: true)` — returns every file on the server, each with name and URL
 - `find_objects` — returns position and resource URL per object; scales with scene size
 - `list_objects` — returns parent/child structure per object; scales with scene size
-- `open_scene` — loads and returns the full first-level children of a scene
+- `open_scene` — loads full root-object identity + transform/resource fields
 
 **Lightweight alternatives:**
 - Use `get_object` to inspect a single object instead of listing all
@@ -350,20 +353,20 @@ Fabric scenes and resource libraries can be large — hundreds of objects per sc
 
 Key response shapes by tool:
 
-- `create_object` → `{ id, name, parentId }`
-- `get_object` → `{ id, name, parentId, position, rotation, scale, resourceReference, resourceName, childCount, children, orbit?, properties? }` (orbit and properties included for celestial objects)
-- `list_objects` items → `{ id, name, parentId, childCount, hasResource }`
-- `find_objects` items → `{ id, name, position, resourceReference }`
-- `open_scene` → `{ sceneId, root: { id, name, childCount }, children: [{ id, name, hasResource }] }`
-- `list_scenes` items → `{ id, name, url }`
+- Object-returning tools include: `{ scopeId, id, nodeUid, parentId, parentNodeUid, ... }`
+- `open_scene` → `{ scopeId, id, nodeUid, parentId, parentNodeUid, name, position, rotation, scale, resourceReference, resourceName, bound, childCount, children, orbit, properties, url }`
+- `list_scenes` and `create_scene` include `{ scopeId, id, name, rootObjectId, url }`
+- `follow_attachment` includes `{ parentScopeId, attachmentNodeUid, childScopeId, childFabricUrl, associatedProfile, reused, root? }`
 - All paginated tools → `{ total, offset, limit, items }`
 
 ## Error Handling
 
-- If a tool call fails, `isError` is `true` and the text starts with `"Error: "`
+- If a tool call fails, `isError` is `true` and the text is structured JSON: `{ code, message, scopeId?, nodeUid?, details? }`
 - Common errors:
-  - `"Not connected"` — pass a `profile` or `url` param (scene tools auto-connect), or call `fabric_connect` first
+  - `SCOPE_TARGET_MISSING` — explicit scope target required for CUD calls
+  - `SCOPE_TARGET_AMBIGUOUS` — no unique connected root scope for fallback
+  - `SCOPE_TARGET_CONFLICT` — multiple target inputs provided
   - `"Invalid object reference"` — ensure IDs use the `"class:id"` format (e.g., `"physical:42"`, not `"42"`)
   - `"Unknown class prefix"` — valid prefixes are `root`, `celestial`, `terrestrial`, `physical`
-- `bulk_update` continues on individual failures and reports them in the `errors` array
+- `bulk_update` continues on individual failures and can return `CROSS_SCOPE_PARTIAL_FAILURE` (mixed) or `CROSS_SCOPE_FAILURE` (all failed)
 - Bulk resource operations report failures in `failedItems`

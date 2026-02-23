@@ -13,9 +13,20 @@ const WRITE_ENABLED = /^(1|true|yes)$/i.test(process.env.FABRIC_IT_WRITE || '');
 const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const SCENE_NAME_PREFIX = process.env.FABRIC_IT_SCENE_PREFIX || 'it-owned';
 
+if (!INTEGRATION_ENABLED) {
+  console.error('[integration] FABRIC_IT_ENABLED is not set; live integration tests will be skipped.');
+}
+
 let cachedTarget = null;
 
-function createWriteSafetyHarness(client) {
+async function closeAllScopes(client) {
+  const scopes = client.listScopes().sort((a, b) => (b.depth ?? 0) - (a.depth ?? 0));
+  for (const scope of scopes) {
+    await client.closeScope({ scopeId: scope.scopeId, cascade: true }).catch(() => {});
+  }
+}
+
+function createWriteSafetyHarness(client, scopeId) {
   const ownedSceneIds = new Set();
   const ownedObjectIds = new Set();
 
@@ -43,38 +54,38 @@ function createWriteSafetyHarness(client) {
   return {
     async createScene(baseName, objectType) {
       const sceneName = `${SCENE_NAME_PREFIX}-${RUN_ID}-${baseName}`;
-      const created = await client.createScene(sceneName, objectType);
+      const created = await client.createScene({ scopeId, name: sceneName, objectType });
       ownedSceneIds.add(created.id);
       return created;
     },
     async deleteScene(sceneId) {
       assertOwnedScene(sceneId);
-      await client.deleteScene(sceneId);
+      await client.deleteScene({ scopeId, sceneId });
       ownedSceneIds.delete(sceneId);
     },
     async createObject(params) {
       assertOwnedParent(params.parentId);
-      const created = await client.createObject(params);
+      const created = await client.createObject({ scopeId, ...params });
       ownedObjectIds.add(created.id);
       return created;
     },
     async updateObject(params) {
       assertOwnedObject(params.objectId);
-      return client.updateObject(params);
+      return client.updateObject({ scopeId, ...params });
     },
     async moveObject(objectId, newParentId) {
       assertOwnedObject(objectId);
       assertOwnedParent(newParentId);
-      return client.moveObject(objectId, newParentId);
+      return client.moveObject({ scopeId, objectId, newParentId });
     },
     async deleteObject(objectId) {
       assertOwnedObject(objectId);
-      await client.deleteObject(objectId);
+      await client.deleteObject({ scopeId, objectId });
       ownedObjectIds.delete(objectId);
     },
     async cleanup() {
       for (const sceneId of Array.from(ownedSceneIds)) {
-        await client.deleteScene(sceneId).catch(() => {});
+        await client.deleteScene({ scopeId, sceneId }).catch(() => {});
         ownedSceneIds.delete(sceneId);
       }
     },
@@ -149,16 +160,16 @@ test('integration: connect/disconnect and status metadata', { timeout: 180000, c
 
   const client = createManifolderPromiseClient();
   try {
-    const root = await client.connect(target.fabricUrl, target.adminKey);
-    assert.ok(root, `connect() should return root model (${target.source})`);
+    const connection = await client.connectRoot({ fabricUrl: target.fabricUrl, adminKey: target.adminKey });
+    assert.ok(connection.scopeId, `connectRoot() should return scope metadata (${target.source})`);
     assert.equal(client.connected, true);
 
-    const status = client.getStatus();
+    const status = client.getScopeStatus({ scopeId: connection.scopeId });
     assert.equal(status.connected, true);
     assert.equal(status.fabricUrl, target.fabricUrl);
     assert.equal(typeof status.resourceRootUrl, 'string');
   } finally {
-    await client.disconnect();
+    await closeAllScopes(client);
     assert.equal(client.connected, false);
   }
 });
@@ -169,11 +180,12 @@ test('integration: scene browse path works in admin mode', { timeout: 180000, co
 
   const client = createManifolderPromiseClient();
   try {
-    await client.connect(target.fabricUrl, target.adminKey);
+    const connection = await client.connectRoot({ fabricUrl: target.fabricUrl, adminKey: target.adminKey });
+    const scopeId = connection.scopeId;
 
     let scenes;
     try {
-      scenes = await client.listScenes();
+      scenes = await client.listScenes({ scopeId });
     } catch (err) {
       t.skip(`listScenes unavailable for this server/profile: ${err.message}`);
       return;
@@ -185,14 +197,14 @@ test('integration: scene browse path works in admin mode', { timeout: 180000, co
     }
 
     const firstScene = scenes[0];
-    const opened = await client.openScene(firstScene.id);
+    const opened = await client.openScene({ scopeId, sceneId: firstScene.id });
     assert.equal(opened.id, firstScene.id);
 
-    const objects = await client.listObjects(firstScene.id);
+    const objects = await client.listObjects({ scopeId, anchorObjectId: firstScene.id });
     assert.ok(Array.isArray(objects));
     assert.ok(objects.length >= 1);
   } finally {
-    await client.disconnect();
+    await closeAllScopes(client);
   }
 });
 
@@ -222,15 +234,19 @@ test('integration: optional write path create/delete scene', { timeout: 240000, 
   };
 
   try {
-    await step('connect', async () => client.connect(target.fabricUrl, target.adminKey));
-    safe = createWriteSafetyHarness(client);
+    const connection = await step('connect', async () => client.connectRoot({
+      fabricUrl: target.fabricUrl,
+      adminKey: target.adminKey,
+    }));
+    const scopeId = connection.scopeId;
+    safe = createWriteSafetyHarness(client, scopeId);
 
     const created = await step('createScene', async () => safe.createScene('scene', sceneType));
     const sceneId = created.id;
     assert.ok(sceneId);
     assert.equal(created.name.startsWith(`${SCENE_NAME_PREFIX}-${RUN_ID}-`), true);
 
-    const reopened = await step('openScene', async () => client.openScene(sceneId));
+    const reopened = await step('openScene', async () => client.openScene({ scopeId, sceneId }));
     assert.equal(reopened.id, sceneId);
 
     // All CUD operations are constrained to run-owned objects only.
@@ -256,6 +272,6 @@ test('integration: optional write path create/delete scene', { timeout: 240000, 
     await step('deleteScene', async () => safe.deleteScene(sceneId));
   } finally {
     await safe?.cleanup().catch(() => {});
-    await client.disconnect().catch(() => {});
+    await closeAllScopes(client).catch(() => {});
   }
 });
