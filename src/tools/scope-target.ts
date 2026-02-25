@@ -1,5 +1,5 @@
-import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
-import { computeRootScopeId } from '../client/ManifolderClient.js';
+import type { IManifolderPromiseClient } from '../client/index.js';
+import { computeRootScopeId } from '../client/index.js';
 import { getProfile, loadConfig, type ProfileConfig } from '../config.js';
 import { toolError } from './errors.js';
 import { setScopeAssociatedProfile } from './scope-profile-registry.js';
@@ -56,6 +56,8 @@ export async function resolveScopeTarget(
     }
 
     try {
+      registerUnsafeHosts(profile);
+      (globalThis as any).__manifolderSSLErrors = [];
       const connected = await client.connectRoot({
         fabricUrl: profile.fabricUrl,
         adminKey: profile.adminKey ?? '',
@@ -63,9 +65,19 @@ export async function resolveScopeTarget(
       setScopeAssociatedProfile(client, connected.scopeId, input.profile);
       return { scopeId: connected.scopeId, source: 'profile' };
     } catch (error) {
+      const sslErrors: string[] = (globalThis as any).__manifolderSSLErrors || [];
+      const unique = [...new Set(sslErrors)];
+      let message = (error as Error).message;
+      if (unique.length) {
+        const existing = profile.unsafeHosts || [];
+        const merged = [...new Set([...existing, ...unique])];
+        const jsonVal = JSON.stringify(merged);
+        message += ` — SSL certificate errors. Add to ~/.config/manifolder-mcp/config.json ` +
+          `in the "${input.profile}" profile: "unsafeHosts": ${jsonVal}`;
+      }
       throw toolError({
         code: 'SCOPE_CONNECT_FAILED',
-        message: (error as Error).message,
+        message,
       });
     }
   }
@@ -166,4 +178,15 @@ export async function resolveAssociatedProfileForUrl(fabricUrl: string): Promise
   }
 
   return null;
+}
+
+function registerUnsafeHosts(profile: ProfileConfig): void {
+  if (profile.unsafeHosts?.length) {
+    const set: Set<string> = (globalThis as any).__manifolderUnsafeHosts;
+    if (set) {
+      for (const host of profile.unsafeHosts) {
+        set.add(host);
+      }
+    }
+  }
 }

@@ -18,7 +18,7 @@ const { handleOpenScene } = await import('../dist/tools/scenes.js');
 const { serializeToolError } = await import('../dist/tools/errors.js');
 const { objectTools } = await import('../dist/tools/objects.js');
 const { resourceTools } = await import('../dist/tools/resources.js');
-const { computeChildScopeId } = await import('../dist/client/ManifolderClient.js');
+const { computeChildScopeId } = await import('../dist/client/index.js');
 const { shapeSceneSummary } = await import('../dist/tools/response-shapers.js');
 
 function createMockClient(overrides = {}) {

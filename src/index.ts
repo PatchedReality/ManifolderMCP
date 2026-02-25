@@ -16,7 +16,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import {
   createManifolderPromiseClient,
 } from './client/index.js';
-import type { IManifolderPromiseClient } from './client/ManifolderClient.js';
+import type { IManifolderPromiseClient } from './client/index.js';
 import { getProfile } from './config.js';
 import { ScpStorage } from './storage/ScpStorage.js';
 

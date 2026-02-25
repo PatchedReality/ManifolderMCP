@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
+import type { IManifolderPromiseClient } from '../client/index.js';
 import { loadConfig } from '../config.js';
 import { resolveScopeTarget } from './scope-target.js';
 import { scopeTargetParams } from './schemas.js';

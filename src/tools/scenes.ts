@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
+import type { IManifolderPromiseClient } from '../client/index.js';
 import type { FabricObject, Scene } from '../types.js';
 import { parseObjectRef } from '../types.js';
 import { objectTypeSchema, scopeTargetParams } from './schemas.js';

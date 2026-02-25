@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
+import type { IManifolderPromiseClient } from '../client/index.js';
 import type { CreateObjectParams, FabricObject, UpdateObjectParams } from '../types.js';
 import { objectTypeSchema, transformFields, celestialFields, vector3Schema, scopeTargetParams } from './schemas.js';
 import { paginate } from '../output.js';

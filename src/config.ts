@@ -12,6 +12,8 @@ export interface ProfileConfig {
   scpKeyPath?: string;
   // URL prefix for referencing uploaded resources in scenes (e.g. "/objects/")
   resourceUrlPrefix?: string;
+  // Hosts that need SSL certificate verification disabled (self-signed certs, incomplete chains)
+  unsafeHosts?: string[];
 }
 
 export interface ManifolderMCPConfig {

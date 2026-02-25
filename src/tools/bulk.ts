@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
+import type { IManifolderPromiseClient } from '../client/index.js';
 import type { BulkOperation } from '../types.js';
 import { objectTypeSchema, transformFields, celestialFields } from './schemas.js';
 import { toolError } from './errors.js';

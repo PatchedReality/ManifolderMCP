@@ -16,7 +16,7 @@ globalThis.MV = {
 const { handleCreateScene, handleOpenScene } = await import('../../dist/tools/scenes.js');
 const { handleCreateObject } = await import('../../dist/tools/objects.js');
 const { handleFollowAttachment } = await import('../../dist/tools/scopes.js');
-const { computeChildScopeId } = await import('../../dist/client/ManifolderClient.js');
+const { computeChildScopeId } = await import('../../dist/client/index.js');
 
 const CLASS_PREFIX_TO_ID = {
   root: 70,

@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
 import '../../src/vendor/mv/index.js';
-import { ManifolderClient, asManifolderPromiseClient } from '../../src/client/ManifolderClient.js';
+import { ManifolderClient, asManifolderPromiseClient } from '../../src/client/index.js';
 
 const CONFIG_PATH = join(homedir(), '.config', 'manifolder-mcp', 'config.json');
 const PROFILE_NAME = process.env.FABRIC_IT_PROFILE || 'default';

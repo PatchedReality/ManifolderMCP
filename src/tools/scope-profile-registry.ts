@@ -1,4 +1,4 @@
-import type { IManifolderPromiseClient } from '../client/ManifolderClient.js';
+import type { IManifolderPromiseClient } from '../client/index.js';
 
 const scopeProfilesByClient = new WeakMap<IManifolderPromiseClient, Map<string, string | null>>();
 

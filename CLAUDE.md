@@ -4,27 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Manifolder MCP Server - an MCP server enabling Claude Code (and other MCP clients) to directly edit spatial Fabric scenes. Wraps MVMF libraries with a thin MCP layer. The client (`ManifolderClient`) is shared with the sibling `../Manifolder/` project and synced from there.
+Manifolder MCP Server - an MCP server enabling Claude Code (and other MCP clients) to directly edit spatial Fabric scenes. Wraps MVMF libraries with a thin MCP layer. The client (`ManifolderClient`) is a git submodule at `lib/ManifolderClient/`, shared with the sibling `../Manifolder/` project.
 
 ## Commands
 
 ```bash
 npm install                      # Install dependencies
-npm run build                    # Build TypeScript + copy vendor & client to dist/
+npm run build                    # Build TypeScript to dist/
 npm run dev                      # TypeScript watch mode
 npm start                        # Run the MCP server
-npm test                         # Run ManifolderClient unit tests
+npm test                         # Run MCP tool unit tests
 npm run test:integration         # Run integration tests (requires server)
 npm run test:record-fixtures     # Record test fixtures from live server
-npm run sync:manifolder-client   # Sync ManifolderClient from ../Manifolder/
-npm run check:manifolder-client-sync  # Check if client is in sync
 ```
 
 ## Architecture
 
 ### Core Components
 
-- **ManifolderClient** (`src/client/ManifolderClient.js`): Shared client synced from `../Manifolder/client/js/`. Exports `createManifolderSubscriptionClient` and `createManifolderPromiseClient` via `src/client/index.ts`.
+- **ManifolderClient** (`lib/ManifolderClient/`): Git submodule containing the shared client, types, vendor MVMF libraries, and Node.js loader. Re-exported via `src/client/index.ts`.
 - **Config** (`src/config.ts`): Loads `~/.config/manifolder-mcp/config.json` for connection profiles and storage backends
 - **Tools** (`src/tools/`): MCP tool implementations:
   - `connection.ts` — connect/disconnect/status
@@ -40,12 +38,12 @@ npm run check:manifolder-client-sync  # Check if client is in sync
 
 ### Vendor Libraries
 
-MVMF libraries synced from SceneAssembler via `scripts/sync-vendor.sh`:
-- `src/vendor/node-shim.js` — XMLHttpRequest, navigator, screen, document stubs
-- `src/vendor/mv/index.js` — loader that imports all MVMF modules in dependency order, redirects console.log to stderr
-- `src/vendor/mv/` — MVMF.js, MVSB.js, MVXP.js, MVIO.js, MVRP.js, MVRest.js, MVRP_Dev.js, MVRP_Fabric.js, MVRP_Map.js
+MVMF libraries live in the `lib/ManifolderClient/` submodule:
+- `vendor/mv/` — MVMF.js (with `globalThis.MV = MV` appended), MVSB.js, MVXP.js, MVIO.js, MVRP.js, MVRest.js, MVRP_Dev.js, MVRP_Fabric.js, MVRP_Map.js
+- `node/node-shim.js` — XMLHttpRequest, navigator, screen, document stubs for Node.js
+- `node/mv-loader.js` — Loads shims + vendor libs in dependency order, redirects console.log to stderr, wraps `globalThis.io()` with per-host SSL bypass and certificate error detection
 
-To update vendor libs: `./scripts/sync-vendor.sh [path-to-SceneAssembler]` (defaults to `../../RP1/SceneAssembler`).
+To update vendor libs: run `./scripts/sync-vendor.sh` in the ManifolderClient repo, commit, then `git submodule update --remote` here.
 
 ### Storage
 
@@ -81,6 +79,7 @@ Server config lives at `~/.config/manifolder-mcp/config.json`:
   "default": {
     "fabricUrl": "https://example.com/fabric/fabric.msf",
     "adminKey": "your-admin-token",
+    "unsafeHosts": ["fabric-server.example.com"],
     "scpHost": "spatial.example.com",
     "scpUser": "deploy",
     "scpRemotePath": "/var/www/objects/",
@@ -92,5 +91,5 @@ Server config lives at `~/.config/manifolder-mcp/config.json`:
 
 ## Development Notes
 
-- **ManifolderClient** is the canonical client, shared with `../Manifolder/`. Edit there, then `npm run sync:manifolder-client` to pull changes here.
+- **ManifolderClient** is the canonical shared client in the `lib/ManifolderClient/` submodule. Edit there, commit, and update the submodule pointer here.
 - For large scenes (800+ objects), use pagination in list operations and SEARCH for filtering

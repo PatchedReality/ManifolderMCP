@@ -11,14 +11,12 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc && cp -r src/vendor dist/ && cp src/client/ManifolderClient.js dist/client/ManifolderClient.js && cp src/client/node-helpers.js dist/client/node-helpers.js",
+    "build": "rm -rf dist && tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "test": "node --test test/mcp-tools.test.js test/integration/mcp-tools-e2e.integration.test.js",
     "test:integration": "node --test --test-force-exit test/integration/ManifolderClient.integration.test.js",
-    "test:record-fixtures": "node test/integration/record-manifolder-fixtures.js",
-    "sync:manifolder-client": "cp ../Manifolder/client/js/ManifolderClient.js src/client/ManifolderClient.js && cp ../Manifolder/client/js/ManifolderClient.d.ts src/client/ManifolderClient.d.ts && cp ../Manifolder/client/js/node-helpers.js src/client/node-helpers.js && cp ../Manifolder/client/types.ts src/types.ts",
-    "check:manifolder-client-sync": "cmp -s ../Manifolder/client/js/ManifolderClient.js src/client/ManifolderClient.js || (echo \"ManifolderClient.js is out of sync. Run: npm run sync:manifolder-client\" && exit 1); cmp -s ../Manifolder/client/js/ManifolderClient.d.ts src/client/ManifolderClient.d.ts || (echo \"ManifolderClient.d.ts is out of sync. Run: npm run sync:manifolder-client\" && exit 1); cmp -s ../Manifolder/client/js/node-helpers.js src/client/node-helpers.js || (echo \"node-helpers.js is out of sync. Run: npm run sync:manifolder-client\" && exit 1); cmp -s ../Manifolder/client/types.ts src/types.ts || (echo \"types.ts is out of sync. Run: npm run sync:manifolder-client\" && exit 1)"
+    "test:record-fixtures": "node test/integration/record-manifolder-fixtures.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
