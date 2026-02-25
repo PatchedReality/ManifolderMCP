@@ -1,140 +1,66 @@
-# Manifolder MCP Server
+# Manifolder MCP
 
-Manifolder MCP server for editing Fabric spatial scenes from Claude Code and other MCP clients.
+An [MCP server](https://modelcontextprotocol.io/) that lets Claude Code (and other MCP clients) directly edit spatial [Fabric](https://omb.wiki/en/spatial-fabric/architecture) scenes. Wraps the MVMF protocol libraries with a thin MCP tool layer.
 
-## Installation
+## Setup
+
+### Prerequisites
+
+- Node.js >= 18
+- Access to a Fabric server
+
+### Install
 
 ```bash
 npm install
 npm run build
 ```
 
-Requires Node.js >= 18.
+### Configure
 
-## Configuration
-
-Create `~/.config/manifolder-mcp/config.json` with your fabric server settings:
+Create `~/.config/manifolder-mcp/config.json`:
 
 ```json
 {
   "default": {
-    "fabricUrl": "https://spatial.example.com/fabric/fabric.msf",
-    "adminKey": "your-admin-token",
-    "scpHost": "spatial.example.com",
-    "scpUser": "deploy",
-    "scpRemotePath": "~/MSF_Map_Svc/dist/web/objects/",
-    "scpKeyPath": "~/.ssh/id_rsa",
-    "resourceUrlPrefix": "/objects/"
+    "fabricUrl": "https://example.com/fabric/fabric.msf",
+    "adminKey": "your-admin-token"
   }
 }
 ```
+
+Optional fields for resource upload/download via SCP:
 
 | Field | Description |
 |-------|-------------|
-| `fabricUrl` | URL to the fabric's MSF config file |
-| `adminKey` | Authentication token for admin operations |
 | `scpHost` | SSH hostname for resource uploads |
 | `scpUser` | SSH username |
-| `scpRemotePath` | Path on server where files are written (supports `~`) |
+| `scpRemotePath` | Server path where files are written (supports `~`) |
 | `scpKeyPath` | Path to SSH private key (supports `~`) |
-| `resourceUrlPrefix` | URL prefix for referencing uploads in scenes |
+| `resourceUrlPrefix` | URL prefix for referencing uploads in scenes (e.g., `/objects/`) |
 
-### How Resource URLs Work
+Multiple profiles can be defined (e.g., `"default"`, `"staging"`) and selected per-call via the `profile` parameter on any tool.
 
-When you upload a file like `Model.glb`, the MCP returns `resourceUrlPrefix + filename` as the resource reference. Fabric clients resolve URLs like this:
+### Add to MCP Client
 
-- **Relative URLs** (no `http://` or `https://`) resolve against the fabric host
-- **Absolute URLs** are used as-is
+Build first (`npm run build`), then register using an absolute path to `dist/index.js`.
 
-Example with fabric at `https://spatial.example.com/fabric/fabric.msf`:
-
-| resourceUrlPrefix | Uploaded file | Resource reference | Resolves to |
-|-------------------|---------------|-------------------|-------------|
-| `/objects/` | `Model.glb` | `/objects/Model.glb` | `https://spatial.example.com/objects/Model.glb` |
-| `https://cdn.example.com/` | `Model.glb` | `https://cdn.example.com/Model.glb` | `https://cdn.example.com/Model.glb` |
-
-**Recommended:** Use `/objects/` when resources are hosted on the same server as the fabric.
-
-### Multiple Profiles
-
-You can define multiple profiles for different environments:
-
-```json
-{
-  "default": {
-    "fabricUrl": "https://spatial.example.com/fabric/fabric.msf",
-    "adminKey": "prod-token",
-    "scpHost": "spatial.example.com",
-    "scpUser": "deploy",
-    "scpRemotePath": "~/MSF_Map_Svc/dist/web/objects/",
-    "scpKeyPath": "~/.ssh/id_rsa",
-    "resourceUrlPrefix": "/objects/"
-  },
-  "staging": {
-    "fabricUrl": "https://staging.example.com/fabric/fabric.msf",
-    "adminKey": "staging-token",
-    "scpHost": "staging.example.com",
-    "scpUser": "deploy",
-    "scpRemotePath": "~/MSF_Map_Svc/dist/web/objects/",
-    "scpKeyPath": "~/.ssh/id_rsa",
-    "resourceUrlPrefix": "/objects/"
-  }
-}
-```
-
-Use `list_profiles` to see available profiles, then `fabric_connect` with the profile name:
-- `fabric_connect profile:"default"` → uses "default"
-- `fabric_connect profile:"staging"` → uses "staging"
-
-## MCP Client Setup
-
-Build the server first (`npm run build`), then create `~/.config/manifolder-mcp/config.json` (see Configuration above).
-
-Use an absolute path to `dist/index.js` in all commands below.
-
-### Claude Code
-
+**Claude Code:**
 ```bash
-# User scope (available in all projects)
 claude mcp add --scope user manifolder -- node /absolute/path/to/ManifolderMCP/dist/index.js
-
-# Project scope
-claude mcp add --scope project manifolder -- node /absolute/path/to/ManifolderMCP/dist/index.js
-
-claude mcp list
 ```
 
-### Codex
-
+**Codex:**
 ```bash
-# Adds server config to ~/.codex/config.toml
 codex mcp add manifolder -- node /absolute/path/to/ManifolderMCP/dist/index.js
-
-codex mcp list
 ```
 
-Equivalent manual config:
-
-```toml
-[mcp_servers.manifolder]
-command = "node"
-args = ["/absolute/path/to/ManifolderMCP/dist/index.js"]
-```
-
-### Gemini CLI
-
+**Gemini CLI:**
 ```bash
-# User scope (global)
 gemini mcp add -s user manifolder node /absolute/path/to/ManifolderMCP/dist/index.js
-
-# Project scope (default)
-gemini mcp add manifolder node /absolute/path/to/ManifolderMCP/dist/index.js
-
-gemini mcp list
 ```
 
-Equivalent manual config in `~/.gemini/settings.json` (or project `.gemini/settings.json`):
-
+**Manual config** (Claude Code `settings.json`, Gemini `settings.json`, etc.):
 ```json
 {
   "mcpServers": {
@@ -146,71 +72,103 @@ Equivalent manual config in `~/.gemini/settings.json` (or project `.gemini/setti
 }
 ```
 
-## Available Tools
+## Tools
 
-### Connection
-- `list_profiles` - List available connection profiles from config
-- `fabric_connect` - Connect using a config profile (required parameter)
-- `fabric_disconnect` - Disconnect from server
-- `fabric_status` - Get connection state and current scene info
+Every tool that touches a scope accepts one of `scopeId`, `profile`, or `url` to identify the target. Passing `profile` or `url` auto-connects if needed.
+
+### Connection & Scopes
+
+| Tool | Purpose |
+|------|---------|
+| `list_profiles` | List connection profiles from config |
+| `fabric_status` | Get scope connection state and info |
+| `list_scopes` | List active scopes and relationships |
+| `follow_attachment` | Open a child scope from an attachment object |
+| `close_scope` | Close a scope and optionally its descendants |
 
 ### Scenes
-- `list_scenes` - List all scenes (paginated: `offset`, `limit`)
-- `open_scene` - Load a scene
-- `create_scene` - Create new scene
-- `delete_scene` - Delete scene and children
+
+| Tool | Purpose |
+|------|---------|
+| `list_scenes` | List scenes (paginated) |
+| `open_scene` | Load a scene and return root object details |
+| `create_scene` | Create a new scene |
+| `delete_scene` | Delete a scene and all children |
 
 ### Objects
-- `list_objects` - List objects in a scene with optional filtering (paginated: `offset`, `limit`)
-- `get_object` - Get object details
-- `create_object` - Create new object (supports GLB models and action resources)
-- `update_object` - Update object properties (name, position, rotation, scale, resource)
-- `delete_object` - Delete object and children (must be in cache)
-- `delete_object_unknown_type` - Delete object when type is unknown (queries server)
-- `move_object` - Reparent object
 
-### Bulk Operations
-- `bulk_update` - Execute multiple create/update/delete/move operations
-- `find_objects` - Search by name pattern, position radius, or resource URL (paginated: `offset`, `limit`)
+| Tool | Purpose |
+|------|---------|
+| `get_object` | Get full object details |
+| `list_objects` | List loaded objects under an anchor (shallow, paginated) |
+| `find_objects` | Search by name, position radius, or resource URL (paginated) |
+| `create_object` | Create object (3D model, container, or action resource) |
+| `update_object` | Update name, transform, resource, bound, orbit, properties |
+| `delete_object` | Delete object and children |
+| `move_object` | Reparent object |
+| `bulk_update` | Batch create/update/delete/move across scopes |
 
 ### Resources
-- `upload_resource` - Upload .glb, .png, .json, etc. to server
-- `download_resource` - Download a resource file from the server
-- `list_resources` - List available resources (paginated: `offset`, `limit`)
-- `delete_resource` - Remove a resource
-- `move_resource` - Rename or move a resource on the server
-- `bulk_upload_resources` - Upload multiple files in one operation
-- `bulk_download_resources` - Download multiple files in one operation
-- `bulk_delete_resources` - Delete multiple resources in one operation
-- `bulk_move_resources` - Move/rename multiple resources in one operation
+
+| Tool | Purpose |
+|------|---------|
+| `upload_resource` | Upload a file (.glb, .png, .json, etc.) |
+| `download_resource` | Download a file from the server |
+| `list_resources` | List server files (supports path, recursive, glob filter) |
+| `delete_resource` | Remove a file |
+| `move_resource` | Move or rename a file |
+| `bulk_upload_resources` | Upload multiple files |
+| `bulk_download_resources` | Download multiple files |
+| `bulk_delete_resources` | Delete multiple files |
+| `bulk_move_resources` | Move/rename multiple files |
 
 ### Action Resources
-- `get_action_resource_schema` - Get the JSON schema for action resources
-- `validate_action_resource` - Validate an action resource file
 
-Action resources are JSON files that define functional content:
-- `action://pointlight` - Point lights
-- `action://showtext` - Text displays
-- `action://rotator` - Rotating objects
-- `action://video` - Video screens
+| Tool | Purpose |
+|------|---------|
+| `get_action_resource_schema` | Get JSON schema for action resource types |
+| `validate_action_resource` | Validate an action resource file |
+
+Action types: `action://pointlight`, `action://showtext`, `action://rotator`, `action://video`.
 
 ## Usage Example
 
-After connecting your MCP client to the server:
-
 ```
 > List my fabric profiles
-> Connect to the default profile
-> List all scenes
-> Open scene 42
-> Create an object called "Cube" at position (0, 1, 0) with resource /objects/Cube.glb
-> Move it to (5, 1, 0)
+> List scenes using profile "default"
+> Open scene Playground  
+> Create an object named "Tree" under the Nature node
+> Move it 5 meters north
 ```
+
+## Development
+
+```bash
+npm run dev                      # TypeScript watch mode
+npm test                         # Unit tests
+npm run test:integration         # Integration tests (requires running server)
+npm run test:record-fixtures     # Record test fixtures from live server
+npm run sync:manifolder-client   # Sync ManifolderClient from ../Manifolder/
+```
+
+### Project Structure
+
+```
+src/
+  index.ts              # MCP server entry point
+  config.ts             # Connection profile loader
+  output.ts             # Pagination helpers
+  agent-guide.md        # Tool docs served to MCP clients
+  client/               # ManifolderClient (synced from ../Manifolder/)
+  tools/                # MCP tool implementations
+  storage/              # SCP-based file storage
+  vendor/               # MVMF protocol libraries (Node.js shimmed)
+```
+
+The `ManifolderClient` is shared with the sibling [Manifolder](https://github.com/PatchedReality/Manifolder) project. Edit there, then `npm run sync:manifolder-client` to pull changes here.
 
 ## License
 
 Copyright Patched Reality, Inc. All rights reserved.
-
-## Attributions
 
 Uses MVMF libraries from Metaversal Corporation.
