@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Patched Reality, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 const DEFAULT_LIMIT = 10;
 
 export interface PagedResult<T> {

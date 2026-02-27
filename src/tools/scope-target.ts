@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Patched Reality, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { IManifolderPromiseClient } from '../client/index.js';
 import { computeRootScopeId } from '../client/index.js';
 import { getProfile, loadConfig, type ProfileConfig } from '../config.js';

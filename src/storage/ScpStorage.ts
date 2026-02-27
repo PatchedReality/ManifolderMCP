@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Patched Reality, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import SftpClient from 'ssh2-sftp-client';
 import { readFile, mkdir } from 'fs/promises';
 import { basename, dirname, join } from 'path';

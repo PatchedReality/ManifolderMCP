@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Patched Reality, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { z } from 'zod';
 import { readFile } from 'fs/promises';
 import {

@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Patched Reality, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 export * from './connection.js';
 export * from './scopes.js';
 export * from './scenes.js';
