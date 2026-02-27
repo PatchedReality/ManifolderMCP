@@ -1,6 +1,19 @@
-# Manifolder MCP
+# ManifolderMCP
 
-An [MCP server](https://modelcontextprotocol.io/) that lets Claude Code (and other MCP clients) directly edit spatial [Fabric](https://omb.wiki/en/spatial-fabric/architecture) scenes. Wraps the MVMF protocol libraries with a thin MCP tool layer.
+ManifolderMCP is a [Model Context Protocol](https://modelcontextprotocol.io/)
+(MCP) server that allows Claude Code and other MCP clients to browse and
+edit [Open Metaverse](https://omb.wiki/) [Spatial Fabric](https://omb.wiki/en/spatial-fabric/architecture) scenes.
+
+It provides a thin MCP tool layer on top of the MVMF protocol libraries
+via the **ManifolderClient** JavaScript library.
+
+ManifolderMCP is an open source project created and maintained by
+[Patched Reality, Inc.](https://patchedreality.com).
+
+## Related Projects
+
+- **[ManifolderClient](/PatchedReality/ManifolderClient)** — JavaScript client library used by this MCP server
+- **[Manifolder](/PatchedReality/Manifolder)** — Web-based explorer for visualizing Open Metaverse fabrics
 
 ## Setup
 
@@ -169,6 +182,17 @@ The `ManifolderClient` is shared with the sibling [Manifolder](https://github.co
 
 ## License
 
-Copyright Patched Reality, Inc. All rights reserved.
+Licensed under the Apache License, Version 2.0.
+See the [LICENSE](LICENSE) file for details.
 
-Uses MVMF libraries from Metaversal Corporation.
+## Attribution
+
+This project uses the MVMF libraries developed by
+[Metaversal Corporation](https://rp1.com/).
+
+See the [NOTICE](NOTICE) file for full attribution details.
+
+## Contributing
+
+Contributions are welcome. By submitting a pull request, you agree that your
+contribution will be licensed under the Apache License, Version 2.0.
