@@ -4,10 +4,6 @@ Manual, agent-runnable suite for scope-aware MCP behavior. This is intended to c
 
 This suite is not a replacement for automated integration tests. It is a comprehensive manual flow.
 
-For agent-usability testing (minimal hints, guide/tool-description-driven behavior), use:
-
-- `ManifolderMCP/docs/naive-agent-smoke-tests.md`
-
 ## Conventions
 
 - Use a unique run suffix: `<RUN>` (example: `20260221a`).
