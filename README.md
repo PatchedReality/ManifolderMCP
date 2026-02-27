@@ -12,8 +12,8 @@ ManifolderMCP is an open source project created and maintained by
 
 ## Related Projects
 
-- **[ManifolderClient](/PatchedReality/ManifolderClient)** — JavaScript client library used by this MCP server
-- **[Manifolder](/PatchedReality/Manifolder)** — Web-based explorer for visualizing Open Metaverse fabrics
+- **[ManifolderClient](https://github.com/PatchedReality/ManifolderClient)** — JavaScript client library used by this MCP server
+- **[Manifolder](https://github.com/PatchedReality/Manifolder)** — Web-based explorer for visualizing Open Metaverse fabrics
 
 ## Setup
 
