@@ -82,12 +82,12 @@ Optional ambiguity check (only if you have a second profile):
 
 | # | Action | Expected |
 |---|--------|----------|
-| 4.1 | `create_scene(scopeId: "<ROOT_SCOPE_A>", name: "ts-child-<RUN>", objectType: "physical")` | Returns child scene; save `id` as `<CHILD_SCENE_ID>`, `url` as `<CHILD_SCENE_URL>`. |
-| 4.2 | `create_object(scopeId: "<ROOT_SCOPE_A>", parentId: "<PARCEL_ID>", name: "ts-attach-<RUN>", objectType: "physical:attachment", resourceReference: "<CHILD_SCENE_URL>")` | Creates attachment object with subtype 255. Response `objectType` is `"physical:attachment"`. Save `id` as `<ATTACHMENT_ID>`. |
-| 4.3 | `get_object(scopeId: "<ROOT_SCOPE_A>", objectId: "<ATTACHMENT_ID>")` | Response `objectType` is `"physical:attachment"`. |
+| 4.1 | `create_scene(scopeId: "<ROOT_SCOPE_A>", name: "ts-child-<RUN>", objectType: "physical:default")` | Returns child scene; save `id` as `<CHILD_SCENE_ID>`, `url` as `<CHILD_SCENE_URL>`. |
+| 4.2 | `create_object(scopeId: "<ROOT_SCOPE_A>", parentId: "<PARCEL_ID>", name: "ts-attach-<RUN>", objectType: "physical:default:attachment", resourceReference: "<CHILD_SCENE_URL>")` | Creates attachment object with subtype 255. Response `objectType` is `"physical:default:attachment"`. Save `id` as `<ATTACHMENT_ID>`. |
+| 4.3 | `get_object(scopeId: "<ROOT_SCOPE_A>", objectId: "<ATTACHMENT_ID>")` | Response `objectType` is `"physical:default:attachment"`. |
 | 4.4 | `follow_attachment(scopeId: "<ROOT_SCOPE_A>", objectId: "<ATTACHMENT_ID>")` | Returns `parentScopeId`, `attachmentNodeUid`, `childScopeId`, `childFabricUrl`, `associatedProfile`, `reused`, and `root` (default `autoOpenRoot=true`). Save `childScopeId` as `<CHILD_SCOPE_ID>`, `root.id` as `<CHILD_ROOT_ID>`. |
 | 4.5 | `list_scopes` | Includes child scope with `parentScopeId: "<ROOT_SCOPE_A>"` and `attachmentNodeUid`. |
-| 4.6 | `create_object(scopeId: "<CHILD_SCOPE_ID>", parentId: "<CHILD_ROOT_ID>", name: "ts-house-<RUN>", objectType: "physical")` | Child-scope object creation succeeds. Response `objectType` is `"physical"`. Save `id` as `<HOUSE_ID>`. |
+| 4.6 | `create_object(scopeId: "<CHILD_SCOPE_ID>", parentId: "<CHILD_ROOT_ID>", name: "ts-house-<RUN>", objectType: "physical:default")` | Child-scope object creation succeeds. Response `objectType` is `"physical:default"`. Save `id` as `<HOUSE_ID>`. |
 | 4.7 | `get_object(scopeId: "<CHILD_SCOPE_ID>", objectId: "<HOUSE_ID>")` | Returns object payload with `nodeUid` rooted in `<CHILD_SCOPE_ID>`. |
 | 4.8 | `follow_attachment(scopeId: "<ROOT_SCOPE_A>", objectId: "<PARCEL_ID>")` | Fails `ATTACHMENT_REFERENCE_INVALID` because parcel is not an attachment point. |
 | 4.9 | `follow_attachment(scopeId: "<ROOT_SCOPE_A>", objectId: "<ATTACHMENT_ID>", autoOpenRoot: false)` | Succeeds without `root` in response; confirms optional root-open behavior. |
@@ -96,9 +96,9 @@ Optional ambiguity check (only if you have a second profile):
 
 | # | Action | Expected |
 |---|--------|----------|
-| 4a.1 | `create_object(scopeId: "<ROOT_SCOPE_A>", parentId: "<PARCEL_ID>", name: "ts-subtype-<RUN>", objectType: "physical")` | Response `objectType` is `"physical"`. Save `id` as `<SUBTYPE_ID>`. |
-| 4a.2 | `update_object(scopeId: "<ROOT_SCOPE_A>", objectId: "<SUBTYPE_ID>", objectType: "physical:attachment")` | Succeeds. Response `objectType` is `"physical:attachment"`. |
-| 4a.3 | `update_object(scopeId: "<ROOT_SCOPE_A>", objectId: "<SUBTYPE_ID>", objectType: "physical")` | Succeeds. Response `objectType` is `"physical"` (subtype back to 0). |
+| 4a.1 | `create_object(scopeId: "<ROOT_SCOPE_A>", parentId: "<PARCEL_ID>", name: "ts-subtype-<RUN>", objectType: "physical:default")` | Response `objectType` is `"physical:default"`. Save `id` as `<SUBTYPE_ID>`. |
+| 4a.2 | `update_object(scopeId: "<ROOT_SCOPE_A>", objectId: "<SUBTYPE_ID>", objectType: "physical:default:attachment")` | Succeeds. Response `objectType` is `"physical:default:attachment"`. |
+| 4a.3 | `update_object(scopeId: "<ROOT_SCOPE_A>", objectId: "<SUBTYPE_ID>", objectType: "physical:default")` | Succeeds. Response `objectType` is `"physical:default"` (subtype back to 0). |
 | 4a.4 | `update_object(scopeId: "<ROOT_SCOPE_A>", objectId: "<SUBTYPE_ID>", objectType: "physical:transport")` | Succeeds. Response `objectType` is `"physical:transport"` (bType changed). |
 | 4a.5 | `update_object(scopeId: "<ROOT_SCOPE_A>", objectId: "<SUBTYPE_ID>", objectType: "celestial:star")` | Fails — class mismatch (object is physical, type specifies celestial). |
 | 4a.6 | `delete_object(scopeId: "<ROOT_SCOPE_A>", objectId: "<SUBTYPE_ID>")` | Cleanup. |
@@ -128,16 +128,14 @@ Create local files:
 | 6.2 | `validate_action_resource(localPath: "/tmp/ts-rotator-<RUN>.json", type: "rotator")` | Validation passes. |
 | 6.3 | `upload_resource(profile: "default", localPath: "/tmp/ts-rotator-<RUN>.json", targetName: "ts/rotator-<RUN>.json")` | Upload succeeds and returns `profile` + `url`. |
 | 6.4 | `list_resources(profile: "default", path: "ts")` | Shows uploaded file with URL. |
-| 6.5 | `upload_resource(profile: "default", scopeId: "<ROOT_SCOPE_A>", localPath: "/tmp/ts-rotator-<RUN>.json")` | Fails target conflict/validation (resource tools are profile-only). |
-| 6.6 | `upload_resource(localPath: "/tmp/ts-rotator-<RUN>.json")` | Fails (missing required `profile`). |
-| 6.7 | `upload_resource(profile: "nonexistent", localPath: "/tmp/ts-rotator-<RUN>.json")` | Fails `SCOPE_NOT_FOUND` / profile-not-found equivalent. |
-| 6.8 | `download_resource(profile: "default", resourceName: "ts/rotator-<RUN>.json", localPath: "/tmp/ts-rotator-dl-<RUN>.json")` | Download succeeds. |
-| 6.9 | `move_resource(profile: "default", sourceName: "ts/rotator-<RUN>.json", destName: "ts/rotator-renamed-<RUN>.json")` | Move succeeds. |
-| 6.10 | `delete_resource(profile: "default", resourceName: "ts/rotator-renamed-<RUN>.json")` | Delete succeeds. |
-| 6.11 | `bulk_upload_resources(profile: "default", files: [{ localPath: "/tmp/ts-a-<RUN>.json", targetName: "ts/bulk-a-<RUN>.json" }, { localPath: "/tmp/ts-b-<RUN>.json", targetName: "ts/bulk-b-<RUN>.json" }])` | Bulk upload succeeds. |
-| 6.12 | `bulk_download_resources(profile: "default", downloads: [{ resourceName: "ts/bulk-a-<RUN>.json", localPath: "/tmp/ts-bulk-a-dl-<RUN>.json" }, { resourceName: "ts/bulk-b-<RUN>.json", localPath: "/tmp/ts-bulk-b-dl-<RUN>.json" }])` | Bulk download succeeds. |
-| 6.13 | `bulk_move_resources(profile: "default", moves: [{ sourceName: "ts/bulk-a-<RUN>.json", destName: "ts/bulk-a-moved-<RUN>.json" }, { sourceName: "ts/bulk-b-<RUN>.json", destName: "ts/bulk-b-moved-<RUN>.json" }])` | Bulk move succeeds. |
-| 6.14 | `bulk_delete_resources(profile: "default", resourceNames: ["ts/bulk-a-moved-<RUN>.json", "ts/bulk-b-moved-<RUN>.json"])` | Bulk delete succeeds. |
+| 6.5 | `upload_resource(profile: "nonexistent", localPath: "/tmp/ts-rotator-<RUN>.json")` | Fails `SCOPE_NOT_FOUND` / profile-not-found equivalent. |
+| 6.6 | `download_resource(profile: "default", resourceName: "ts/rotator-<RUN>.json", localPath: "/tmp/ts-rotator-dl-<RUN>.json")` | Download succeeds. |
+| 6.7 | `move_resource(profile: "default", sourceName: "ts/rotator-<RUN>.json", destName: "ts/rotator-renamed-<RUN>.json")` | Move succeeds. |
+| 6.8 | `delete_resource(profile: "default", resourceName: "ts/rotator-renamed-<RUN>.json")` | Delete succeeds. |
+| 6.9 | `bulk_upload_resources(profile: "default", files: [{ localPath: "/tmp/ts-a-<RUN>.json", targetName: "ts/bulk-a-<RUN>.json" }, { localPath: "/tmp/ts-b-<RUN>.json", targetName: "ts/bulk-b-<RUN>.json" }])` | Bulk upload succeeds. |
+| 6.10 | `bulk_download_resources(profile: "default", downloads: [{ resourceName: "ts/bulk-a-<RUN>.json", localPath: "/tmp/ts-bulk-a-dl-<RUN>.json" }, { resourceName: "ts/bulk-b-<RUN>.json", localPath: "/tmp/ts-bulk-b-dl-<RUN>.json" }])` | Bulk download succeeds. |
+| 6.11 | `bulk_move_resources(profile: "default", moves: [{ sourceName: "ts/bulk-a-<RUN>.json", destName: "ts/bulk-a-moved-<RUN>.json" }, { sourceName: "ts/bulk-b-<RUN>.json", destName: "ts/bulk-b-moved-<RUN>.json" }])` | Bulk move succeeds. |
+| 6.12 | `bulk_delete_resources(profile: "default", resourceNames: ["ts/bulk-a-moved-<RUN>.json", "ts/bulk-b-moved-<RUN>.json"])` | Bulk delete succeeds. |
 
 ---
 
