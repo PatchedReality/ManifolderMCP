@@ -24,7 +24,7 @@ export const scopeTools = {
     }),
   },
   follow_attachment: {
-    description: 'Resolve and open a child scope from an attachment-capable object. The object must already have its resourceReference set to the fabric URL of a child scene (from create_scene or list_scenes). Set this via update_object before calling follow_attachment.',
+    description: 'Resolve and open a child scope from an attachment point (objectType with :attachment suffix). The object must have resourceReference set to the fabric URL of a child scene. Set objectType with :attachment suffix and resourceReference via create_object or update_object before calling follow_attachment.',
     inputSchema: z.object({
       ...scopeTargetParams,
       objectId: z.string(),

@@ -22,7 +22,7 @@ This format is used for object identifiers: `parentId`, `objectId`, `newParentId
 
 ## Object Types
 
-When creating objects, `objectType` specifies the class and subtype using `"class:subtype"` format:
+When creating or updating objects, `objectType` specifies the class and type using `"class:type"` format, with an optional `:subtype` suffix (defaults to 0 if omitted):
 
 | objectType | Description |
 |---|---|
@@ -30,12 +30,14 @@ When creating objects, `objectType` specifies the class and subtype using `"clas
 | `terrestrial:parcel` | Parcel |
 | `celestial:universe` | Universe |
 | `celestial:planet` | Planet |
-| `physical` | Default physical (models, containers, lights) |
+| `physical:default` | Default physical (models, containers, lights) |
 | `physical:transport` | Transport |
 
-When `objectType` is omitted, defaults to `physical`.
+When `objectType` is omitted, defaults to `physical:default`.
 
-These are the most common types. The full enum includes additional celestial subtypes (e.g., `celestial:galaxy`, `celestial:star_system`) and terrestrial subtypes (e.g., `terrestrial:county`, `terrestrial:city`). See the `objectType` parameter on `create_object` for the complete list.
+The `:subtype` suffix is optional. For example, `celestial:star` is equivalent to `celestial:star:0`. The special subtype 255 denotes an attachment point and can be written as `:attachment` — e.g., `celestial:star:attachment` or `terrestrial:parcel:attachment`.
+
+These are the most common types. The full enum includes additional celestial types (e.g., `celestial:galaxy`, `celestial:star_system`) and terrestrial types (e.g., `terrestrial:county`, `terrestrial:city`). See the `objectType` parameter on `create_object` for the complete list.
 
 ### Valid Parent/Child Combinations
 
@@ -46,11 +48,15 @@ Not all object types can be nested freely. The parent's class determines which c
 | root | celestial, terrestrial, physical |
 | celestial:surface | terrestrial |
 | celestial (other) | celestial |
-| terrestrial:parcel | terrestrial, physical |
+| terrestrial:parcel | physical |
 | terrestrial (other) | terrestrial |
 | physical | physical |
 
-**Attachment points:** `celestial:surface` and `terrestrial:parcel` are special attachment point types that bridge between tiers. Surfaces are the only celestial type that can have terrestrial children (and cannot be children of other surfaces). Parcels are the only terrestrial type that can have physical children (and cannot be children of other parcels).
+Same-type nesting requires the child's subtype to be greater than the parent's subtype. Attachment objects (subtype 255, i.e. the `:attachment` suffix) cannot have children.
+
+**Bridge types:** `celestial:surface` and `terrestrial:parcel` bridge between class tiers. Surfaces are the only celestial type that can have terrestrial children (and cannot be children of other surfaces). Parcels are the only terrestrial type that can have physical children (and cannot be children of other parcels).
+
+**Attachment points:** Any object can be made an attachment point by setting its `objectType` with the `:attachment` suffix and its `resourceReference` to a child scene's fabric URL.
 
 ## Core Workflow
 
@@ -61,11 +67,12 @@ Not all object types can be nested freely. The parent's class determines which c
 2. **List scenes**: `list_scenes` → returns scenes with `scopeId` and `url`
 3. **Open a scene**: `open_scene(sceneId: "physical:1", scopeId: "...")` → returns `get_object`-equivalent root payload plus `url`
 4. **Work with objects**: create, update, delete, move, search
-5. **Traverse attachments**: An object becomes attachment-capable when its `resourceReference` points to a child scene's fabric URL. Typical sequence:
+5. **Creating attachments and child fabrics**: An object becomes an attachment point when its `objectType` has the `:attachment` suffix and its `resourceReference` points to a child scene's fabric URL. Typical sequence:
    1. `create_scene(name: "child scene")` → returns `{ url }` (the fabric URL)
-   2. `update_object(objectId: "terrestrial:3", resourceReference: "<url from create_scene>")` — link the parcel to the child scene
-   3. `follow_attachment(scopeId, objectId: "terrestrial:3")` → opens the child scope and returns `{ childScopeId, childFabricUrl }`
-6. **Check scopes/status**: `list_scopes`, `fabric_status`
+   2. `update_object(objectId: "terrestrial:3", objectType: "terrestrial:parcel:attachment", resourceReference: "<url from create_scene>")` — set as attachment point and link to child scene
+6. **Traversing attachments**: Use `follow_attachment` on an existing attachment to open the child scope:
+   - `follow_attachment(scopeId, objectId: "terrestrial:3")` → opens the child scope and returns `{ childScopeId, childFabricUrl }`
+7. **Check scopes/status**: `list_scopes`, `fabric_status`
 
 ## Object Manipulation
 
@@ -114,9 +121,10 @@ update_object(objectId: "physical:42", name: "New Name", scale: {x:2, y:2, z:2})
 update_object(objectId: "terrestrial:3", resourceReference: "<url from list_resources>")
 update_object(objectId: "celestial:5", orbit: {period: 2019699258, start: 0, a: 149598023000, b: 149577131000}, rotation: {x: 0, y: 0.782, z: 0, w: 0.623})
 update_object(objectId: "celestial:5", properties: {mass: 5.97e24, gravity: 9.81, color: 0, brightness: 0, reflectivity: 0.367})
+update_object(objectId: "celestial:5", objectType: "celestial:star:attachment")
 ```
 
-You can update `name`, `position`, `rotation`, `scale`, `resourceReference`, `resourceName`, `bound`, `orbit`, and `properties` — any combination in one call. `objectType` is set at creation time only. `orbit` and `properties` only apply to celestial objects.
+You can update `name`, `position`, `rotation`, `scale`, `resourceReference`, `resourceName`, `bound`, `orbit`, `properties`, and `objectType` — any combination in one call. `objectType` on update changes the type and/or subtype; the class prefix is validated but immutable. `orbit` and `properties` only apply to celestial objects.
 
 ### Deleting Objects
 
@@ -361,8 +369,8 @@ Fabric scenes and resource libraries can be large — hundreds of objects per sc
 
 Key response shapes by tool:
 
-- Object-returning tools include: `{ scopeId, id, nodeUid, parentId, parentNodeUid, ... }`
-- `open_scene` → `{ scopeId, id, nodeUid, parentId, parentNodeUid, name, position, rotation, scale, resourceReference, resourceName, bound, childCount, children, orbit, properties, url }`
+- Object-returning tools include: `{ scopeId, id, nodeUid, parentId, parentNodeUid, objectType, ... }`
+- `open_scene` → `{ scopeId, id, nodeUid, parentId, parentNodeUid, objectType, name, position, rotation, scale, resourceReference, resourceName, bound, childCount, children, orbit, properties, url }`
 - `list_scenes` and `create_scene` include `{ scopeId, id, name, rootObjectId, url }`
 - `follow_attachment` includes `{ parentScopeId, attachmentNodeUid, childScopeId, childFabricUrl, associatedProfile, reused, root? }`
 - All paginated tools → `{ total, offset, limit, items }`

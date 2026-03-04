@@ -97,7 +97,7 @@ function createToolPathClient() {
     getScopeStatus: ({ scopeId }) => ({ scopeId, connected: true }),
     getResourceRootUrl: ({ scopeId }) => resourceRoots.get(scopeId) || '',
     createScene: async ({ scopeId, name, objectType }) => {
-      const prefix = (objectType || 'physical').startsWith('terrestrial') ? 'terrestrial' : 'physical';
+      const prefix = (objectType || 'physical:default').startsWith('terrestrial') ? 'terrestrial' : 'physical';
       const sceneId = nextId(scopeId, prefix);
       const classId = prefix === 'terrestrial' ? 72 : 73;
       const scene = { id: sceneId, name, rootObjectId: sceneId, classId, scopeId };
@@ -116,7 +116,7 @@ function createToolPathClient() {
       return scene;
     },
     createObject: async ({ scopeId, parentId, name, objectType, resourceReference }) => {
-      const prefix = (objectType || 'physical').startsWith('terrestrial') ? 'terrestrial' : 'physical';
+      const prefix = (objectType || 'physical:default').startsWith('terrestrial') ? 'terrestrial' : 'physical';
       const objectId = nextId(scopeId, prefix);
       const obj = buildScopeObject(scopeId, {
         id: objectId,
@@ -217,7 +217,7 @@ test('MCP-layer E2E: sector -> parcels -> attachments -> child content via tools
   const childSceneResult = await invokeTool(client, 'create_scene', {
     scopeId: 'fs1_root',
     name: 'Child Physical Scene',
-    objectType: 'physical',
+    objectType: 'physical:default',
   });
   const childScene = childSceneResult.scene;
 
@@ -225,7 +225,7 @@ test('MCP-layer E2E: sector -> parcels -> attachments -> child content via tools
     scopeId: 'fs1_root',
     parentId: parcel.id,
     name: 'Attachment',
-    objectType: 'physical',
+    objectType: 'physical:default',
     resourceReference: childScene.url,
   });
   const followed = await invokeTool(client, 'follow_attachment', {
@@ -240,7 +240,7 @@ test('MCP-layer E2E: sector -> parcels -> attachments -> child content via tools
     scopeId: followed.childScopeId,
     parentId: followed.root.id,
     name: 'House',
-    objectType: 'physical',
+    objectType: 'physical:default',
   });
   assert.equal(house.scopeId, followed.childScopeId);
   assert.equal(house.parentId, followed.root.id);

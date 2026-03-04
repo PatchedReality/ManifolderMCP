@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import type { IManifolderPromiseClient } from '../client/index.js';
 import type { BulkOperation } from '../types.js';
-import { objectTypeSchema, transformFields, celestialFields } from './schemas.js';
+import { objectTypeSchema, resolveCompositeObjectType, transformFields, celestialFields } from './schemas.js';
 import { toolError } from './errors.js';
 import { asMCPClient } from './mcp-client.js';
 
@@ -28,6 +28,7 @@ const operationSchema = z.discriminatedUnion('type', [
       name: z.string().optional(),
       ...transformFields,
       ...celestialFields,
+      objectType: objectTypeSchema.optional(),
     }),
   }),
   z.object({
@@ -78,8 +79,16 @@ export async function handleBulkUpdate(
 
   for (const batch of args.scopeBatches) {
     total += batch.operations.length;
+    const resolvedOps = batch.operations.map(function (op) {
+      if ((op.type === 'create' || op.type === 'update') && (op.params as Record<string, unknown>).objectType) {
+        const { objectType: compositeType, ...rest } = op.params as Record<string, unknown>;
+        const resolved = resolveCompositeObjectType(compositeType as string);
+        return { ...op, params: { ...rest, ...resolved } };
+      }
+      return op;
+    });
     try {
-      const result = await mcpClient.bulkUpdate({ scopeId: batch.scopeId, operations: batch.operations });
+      const result = await mcpClient.bulkUpdate({ scopeId: batch.scopeId, operations: resolvedOps as BulkOperation[] });
       succeeded += result.success;
       failed += result.failed;
       if (result.errors.length > 0) {

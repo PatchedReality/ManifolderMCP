@@ -33,7 +33,7 @@ export const sceneTools = {
     description: 'Create a new empty scene in the resolved scope.',
     inputSchema: z.object({
       name: z.string().describe('Name for the new scene'),
-      objectType: objectTypeSchema.optional().describe('Object type for the scene root. Examples: "terrestrial:sector", "celestial:planet". Defaults to "physical" when omitted.'),
+      objectType: objectTypeSchema.optional().describe('Object type for the scene root. Examples: "terrestrial:sector", "celestial:planet". Defaults to "physical:default" when omitted.'),
       ...scopeTargetParams,
     }),
   },

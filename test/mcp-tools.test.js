@@ -19,7 +19,8 @@ const { serializeToolError } = await import('../dist/tools/errors.js');
 const { objectTools } = await import('../dist/tools/objects.js');
 const { resourceTools } = await import('../dist/tools/resources.js');
 const { computeChildScopeId } = await import('../dist/client/index.js');
-const { shapeSceneSummary } = await import('../dist/tools/response-shapers.js');
+const { shapeSceneSummary, shapeObjectResponse } = await import('../dist/tools/response-shapers.js');
+const { parseObjectType, formatObjectType } = await import('../dist/tools/schemas.js');
 
 function createMockClient(overrides = {}) {
   return {
@@ -262,7 +263,9 @@ test('open_scene returns get_object-equivalent payload plus url', async () => {
     resourceName: 'scene.glb',
     bound: { x: 10, y: 5, z: 10 },
     classId: 73,
+    type: 0,
     subtype: 0,
+    isAttachmentPoint: false,
     children: ['physical:8'],
     orbit: null,
     properties: null,
@@ -289,6 +292,7 @@ test('open_scene returns get_object-equivalent payload plus url', async () => {
   assert.deepEqual(payload.bound, { x: 10, y: 5, z: 10 });
   assert.equal(payload.childCount, 1);
   assert.deepEqual(payload.children, ['physical:8']);
+  assert.equal(payload.objectType, 'physical:default');
   assert.equal(payload.url, 'https://cdn.example.com/resources/fabric/73/7');
 });
 
@@ -309,7 +313,9 @@ test('open_scene does not return legacy root/children wrapper', async () => {
       resourceName: null,
       bound: null,
       classId: 73,
+      type: 0,
       subtype: 0,
+      isAttachmentPoint: false,
       children: [],
     }),
     getResourceRootUrl: () => 'https://cdn.example.com/resources/',
@@ -356,4 +362,108 @@ test('object and resource schemas enforce scope-native anchors/targets', () => {
     scopeId: 'fs1_conflict',
   });
   assert.equal(parseWithConflictField.success, false);
+});
+
+test('parseObjectType handles base types without subtype', () => {
+  assert.deepEqual(parseObjectType('celestial:star'), { classId: 71, type: 10, subtype: 0 });
+  assert.deepEqual(parseObjectType('physical:default'), { classId: 73, type: 0, subtype: 0 });
+  assert.deepEqual(parseObjectType('terrestrial:parcel'), { classId: 72, type: 11, subtype: 0 });
+});
+
+test('parseObjectType handles numeric subtype suffix', () => {
+  assert.deepEqual(parseObjectType('celestial:star:5'), { classId: 71, type: 10, subtype: 5 });
+  assert.deepEqual(parseObjectType('celestial:star_cluster:3'), { classId: 71, type: 7, subtype: 3 });
+});
+
+test('parseObjectType handles attachment suffix', () => {
+  assert.deepEqual(parseObjectType('celestial:star:attachment'), { classId: 71, type: 10, subtype: 255 });
+  assert.deepEqual(parseObjectType('celestial:surface:attachment'), { classId: 71, type: 17, subtype: 255 });
+  assert.deepEqual(parseObjectType('physical:transport:attachment'), { classId: 73, type: 1, subtype: 255 });
+});
+
+test('parseObjectType rejects invalid types', () => {
+  assert.throws(() => parseObjectType('invalid:type'), /Unknown objectType/);
+  assert.throws(() => parseObjectType('celestial:star:abc'), /Invalid subtype/);
+  assert.throws(() => parseObjectType('celestial:star:256'), /Invalid subtype/);
+});
+
+test('formatObjectType produces correct strings', () => {
+  assert.equal(formatObjectType(71, 10, 0), 'celestial:star');
+  assert.equal(formatObjectType(71, 10, 5), 'celestial:star:5');
+  assert.equal(formatObjectType(71, 10, 255), 'celestial:star:attachment');
+  assert.equal(formatObjectType(73, 0, 0), 'physical:default');
+  assert.equal(formatObjectType(73, 1, 255), 'physical:transport:attachment');
+});
+
+test('shapeObjectResponse includes objectType field', () => {
+  const obj = {
+    id: 'physical:1',
+    parentId: 'root',
+    name: 'Test',
+    transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 }, scale: { x: 1, y: 1, z: 1 } },
+    resourceReference: null,
+    resourceName: null,
+    bound: null,
+    classId: 73,
+    type: 0,
+    subtype: 0,
+    isAttachmentPoint: false,
+    children: [],
+  };
+  const shaped = shapeObjectResponse('fs1_scope', obj);
+  assert.equal(shaped.objectType, 'physical:default');
+  assert.equal(shaped.isAttachmentPoint, undefined);
+});
+
+test('shapeObjectResponse formats attachment objectType', () => {
+  const obj = {
+    id: 'celestial:5',
+    parentId: 'celestial:1',
+    name: 'Surface',
+    transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 }, scale: { x: 1, y: 1, z: 1 } },
+    resourceReference: 'https://example.com/fabric/73/1',
+    resourceName: null,
+    bound: null,
+    classId: 71,
+    type: 17,
+    subtype: 255,
+    isAttachmentPoint: true,
+    children: null,
+  };
+  const shaped = shapeObjectResponse('fs1_scope', obj);
+  assert.equal(shaped.objectType, 'celestial:surface:attachment');
+});
+
+test('open_scene response includes objectType', async () => {
+  const rootObject = {
+    id: 'physical:7',
+    scopeId: 'fs1_scope',
+    nodeUid: 'fs1_scope:physical:7',
+    parentId: 'root',
+    parentNodeUid: 'fs1_scope:root:1',
+    name: 'Scene Root',
+    transform: {
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      scale: { x: 1, y: 1, z: 1 },
+    },
+    resourceReference: null,
+    resourceName: null,
+    bound: null,
+    classId: 73,
+    type: 0,
+    subtype: 0,
+    isAttachmentPoint: false,
+    children: [],
+    orbit: null,
+    properties: null,
+  };
+  const client = createMockClient({
+    listScopes: () => [{ scopeId: 'fs1_scope', parentScopeId: null }],
+    openScene: async () => rootObject,
+    getResourceRootUrl: () => 'https://cdn.example.com/resources/',
+  });
+  const payload = JSON.parse(await handleOpenScene(client, { scopeId: 'fs1_scope', sceneId: 'physical:7' }));
+  assert.equal(payload.objectType, 'physical:default');
+  assert.equal(payload.isAttachmentPoint, undefined);
 });

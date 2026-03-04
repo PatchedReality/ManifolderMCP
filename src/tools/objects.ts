@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import type { IManifolderPromiseClient } from '../client/index.js';
 import type { CreateObjectParams, FabricObject, UpdateObjectParams } from '../types.js';
-import { objectTypeSchema, transformFields, celestialFields, vector3Schema, scopeTargetParams } from './schemas.js';
+import { objectTypeSchema, resolveCompositeObjectType, transformFields, celestialFields, vector3Schema, scopeTargetParams } from './schemas.js';
 import { paginate } from '../output.js';
 import { resolveScopeTarget } from './scope-target.js';
 import { shapeObjectResponse } from './response-shapers.js';
@@ -41,23 +41,24 @@ export const objectTools = {
     }),
   },
   create_object: {
-    description: 'Create a new object in the scene. For regular 3D models, set resourceReference to the url returned by upload_resource or list_resources. For action resources (lights, text, rotators, video), set resourceReference to the action URI and resourceName to the uploaded JSON config url.',
+    description: 'Create a new object in the scene. For regular 3D models, set resourceReference to the url returned by upload_resource or list_resources. For action resources (lights, text, rotators, video), set resourceReference to the action URI and resourceName to the uploaded JSON config url. To create an attachment point, append ":attachment" to objectType (e.g., "celestial:surface:attachment") and set resourceReference to the child scene fabric URL.',
     inputSchema: z.object({
       parentId: z.string().describe('ID of the parent object (e.g., "physical:123", "terrestrial:3", or "root")'),
       name: z.string().describe('Name for the new object'),
       ...transformFields,
       ...celestialFields,
-      objectType: objectTypeSchema.optional().describe('Object type in "class:subtype" format. Examples: "terrestrial:sector", "terrestrial:parcel", "celestial:planet", "physical:transport". Defaults to "physical" when omitted. Use parentId "root" to create under RMRoot.'),
+      objectType: objectTypeSchema.optional(),
       ...scopeTargetParams,
     }),
   },
   update_object: {
-    description: 'Update properties of an existing object',
+    description: 'Update properties of an existing object. Use objectType to change type and/or subtype (class is validated but immutable).',
     inputSchema: z.object({
       objectId: z.string().describe('ID of the object to update (e.g., "physical:42", "terrestrial:3")'),
       name: z.string().optional().describe('New name'),
       ...transformFields,
       ...celestialFields,
+      objectType: objectTypeSchema.optional(),
       ...scopeTargetParams,
     }),
   },
@@ -131,29 +132,31 @@ export async function handleGetObject(
 
 export async function handleCreateObject(
   client: IManifolderPromiseClient,
-  args: Omit<CreateObjectParams, 'skipParentRefetch'> & { scopeId?: string; profile?: string; url?: string }
+  args: Omit<CreateObjectParams, 'skipParentRefetch'> & ScopeTargetOnly
 ): Promise<string> {
   const mcpClient = asMCPClient(client);
   const target = await resolveScopeTarget(args, client, {
     allowImplicitFallback: false,
     isCUD: true,
   });
-  const createArgs = stripScopeTarget(args);
-  const obj = await mcpClient.createObject({ scopeId: target.scopeId, ...createArgs }) as FabricObject;
+  const { objectType: compositeType, subtype: _sub, ...rest } = stripScopeTarget(args);
+  const resolved = compositeType ? resolveCompositeObjectType(compositeType) : {};
+  const obj = await mcpClient.createObject({ scopeId: target.scopeId, ...rest, ...resolved }) as FabricObject;
   return JSON.stringify(shapeObjectResponse(target.scopeId, obj));
 }
 
 export async function handleUpdateObject(
   client: IManifolderPromiseClient,
-  args: Omit<UpdateObjectParams, 'skipRefetch'> & { scopeId?: string; profile?: string; url?: string }
+  args: Omit<UpdateObjectParams, 'skipRefetch'> & ScopeTargetOnly
 ): Promise<string> {
   const mcpClient = asMCPClient(client);
   const target = await resolveScopeTarget(args, client, {
     allowImplicitFallback: false,
     isCUD: true,
   });
-  const updateArgs = stripScopeTarget(args);
-  const obj = await mcpClient.updateObject({ scopeId: target.scopeId, ...updateArgs }) as FabricObject;
+  const { objectType: compositeType, subtype: _sub, ...rest } = stripScopeTarget(args);
+  const resolved = compositeType ? resolveCompositeObjectType(compositeType) : {};
+  const obj = await mcpClient.updateObject({ scopeId: target.scopeId, ...rest, ...resolved }) as FabricObject;
   return JSON.stringify(shapeObjectResponse(target.scopeId, obj));
 }
 

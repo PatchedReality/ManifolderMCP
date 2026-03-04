@@ -5,6 +5,7 @@
 
 import type { FabricObject, Scene } from '../types.js';
 import { parseObjectRef } from '../types.js';
+import { formatObjectType } from './schemas.js';
 
 export function shapeObjectResponse(scopeId: string, obj: FabricObject): Record<string, unknown> {
   return {
@@ -20,6 +21,7 @@ export function shapeObjectResponse(scopeId: string, obj: FabricObject): Record<
     resourceReference: obj.resourceReference,
     resourceName: obj.resourceName,
     bound: obj.bound,
+    objectType: formatObjectType(obj.classId, obj.type, obj.subtype),
     childCount: obj.children === null ? -1 : obj.children.length,
     children: obj.children,
     orbit: obj.orbit,
