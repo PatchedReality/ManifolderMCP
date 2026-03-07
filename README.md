@@ -2,7 +2,7 @@
 
 ManifolderMCP is a [Model Context Protocol](https://modelcontextprotocol.io/)
 (MCP) server that allows Claude Code and other MCP clients to browse and
-edit [Open Metaverse](https://omb.wiki/) [Spatial Fabric](https://omb.wiki/en/spatial-fabric/architecture) scenes.
+edit [Open Metaverse](https://omb.metaverse-standards.org/) [Spatial Fabric](https://omb.metaverse-standards.org/en/spatial-fabric/architecture) scenes.
 
 It provides a thin MCP tool layer on top of the MVMF protocol libraries
 via the **ManifolderClient** JavaScript library.
