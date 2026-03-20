@@ -5,8 +5,8 @@
 
 import { z } from 'zod';
 import type { IManifolderPromiseClient } from '../client/index.js';
-import type { CreateObjectParams, FabricObject, UpdateObjectParams } from '../types.js';
-import { objectTypeSchema, resolveCompositeObjectType, transformFields, celestialFields, vector3Schema, scopeTargetParams } from './schemas.js';
+import type { CreateObjectParams, EarthAttachmentParentResult, FabricObject, UpdateObjectParams } from '../types.js';
+import { objectTypeSchema, resolveCompositeObjectType, transformFields, celestialFields, vector3Schema, scopeTargetParams, findEarthAttachmentParentSchema } from './schemas.js';
 import { paginate } from '../output.js';
 import { resolveScopeTarget } from './scope-target.js';
 import { shapeObjectResponse } from './response-shapers.js';
@@ -81,7 +81,7 @@ export const objectTools = {
     description: 'Search for objects by name pattern, position radius, or resource URL using an in-scope anchor object ID.',
     inputSchema: z.object({
       ...scopeTargetParams,
-      anchorObjectId: z.string().describe('Object ID to scope the search to.'),
+      anchorObjectId: z.string().optional().describe('Object ID to scope the search to. Defaults to the terrestrial root when omitted.'),
       query: z.object({
         namePattern: z.string().optional().describe('Name prefix to search for (begins-with matching, case-insensitive)'),
         positionRadius: z.object({
@@ -93,6 +93,10 @@ export const objectTools = {
       offset: z.number().optional().describe('Skip first N results (default: 0)'),
       limit: z.number().optional().describe('Max results to return (default: 10)'),
     }),
+  },
+  find_earth_attachment_parent: {
+    description: 'Find the smallest terrestrial parent object for an Earth campus attachment and compute the attachment geometry needed to create the attachment point.',
+    inputSchema: findEarthAttachmentParentSchema,
   },
 };
 
@@ -196,7 +200,7 @@ export async function handleFindObjects(
     scopeId?: string;
     profile?: string;
     url?: string;
-    anchorObjectId: string;
+    anchorObjectId?: string;
     query: {
       namePattern?: string;
       positionRadius?: { center: { x: number; y: number; z: number }; radius: number };
@@ -218,5 +222,37 @@ export async function handleFindObjects(
   }) as FabricObject[];
   const items = objects.map((obj) => shapeObjectResponse(target.scopeId, obj));
   const result = paginate(items, args.offset, args.limit);
+  return JSON.stringify(result);
+}
+
+export async function handleFindEarthAttachmentParent(
+  client: IManifolderPromiseClient,
+  args: {
+    scopeId?: string;
+    profile?: string;
+    url?: string;
+    anchorObjectId?: string;
+    lat?: number;
+    lon?: number;
+    boundX?: number;
+    boundZ?: number;
+    boundY?: number;
+    nodes?: { lat: number; lon: number }[];
+    city?: string;
+    community?: string;
+    county?: string;
+    state?: string;
+    country?: string;
+  }
+): Promise<string> {
+  const mcpClient = asMCPClient(client);
+  const target = await resolveScopeTarget(args, client, {
+    allowImplicitFallback: true,
+    isCUD: false,
+  });
+  const result = await mcpClient.findEarthAttachmentParent({
+    scopeId: target.scopeId,
+    ...stripScopeTarget(args),
+  }) as EarthAttachmentParentResult;
   return JSON.stringify(result);
 }

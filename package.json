@@ -15,8 +15,8 @@
     "build": "rm -rf dist && tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "test": "node --test test/mcp-tools.test.js test/integration/mcp-tools-e2e.integration.test.js",
-    "test:integration": "node --test --test-force-exit test/integration/ManifolderClient.integration.test.js",
+    "test": "npm run build && node --test test/mcp-tools.test.js test/integration/mcp-tools-e2e.integration.test.js",
+    "test:integration": "npm run build && node --test --test-force-exit test/integration/ManifolderClient.integration.test.js",
     "test:record-fixtures": "node test/integration/record-manifolder-fixtures.js"
   },
   "dependencies": {

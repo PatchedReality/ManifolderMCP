@@ -12,6 +12,11 @@ export const vector3Schema = z.object({
   z: z.number(),
 });
 
+export const latLonSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lon: z.number().min(-180).max(180),
+});
+
 export const quaternionSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -53,6 +58,38 @@ export const scopeTargetParams = {
   profile: z.string().optional(),
   url: z.string().optional(),
 };
+
+export const findEarthAttachmentParentSchema = z.object({
+  ...scopeTargetParams,
+  anchorObjectId: z.string().optional().describe('Object ID to scope the search to. Defaults to the terrestrial root.'),
+  lat: z.number().min(-90).max(90).optional().describe('Campus center latitude in degrees (WGS84)'),
+  lon: z.number().min(-180).max(180).optional().describe('Campus center longitude in degrees (WGS84)'),
+  boundX: z.number().min(1).optional().describe('Campus east-west half-extent in meters (same semantics as bound.x on objects)'),
+  boundZ: z.number().min(1).optional().describe('Campus north-south half-extent in meters (same semantics as bound.z on objects)'),
+  boundY: z.number().min(1).optional().describe('Campus height in meters (optional — derived from sector subtype if omitted)'),
+  nodes: z.array(latLonSchema).min(4).optional().describe('Perimeter nodes (minimum 4). If provided, center, width, and depth are computed from them.'),
+  city: z.string().optional(),
+  community: z.string().optional(),
+  county: z.string().optional(),
+  state: z.string().optional(),
+  country: z.string().optional(),
+}).superRefine((value, ctx) => {
+  if (value.nodes && value.nodes.length >= 4) {
+    return;
+  }
+  if (typeof value.lat !== 'number') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['lat'], message: 'lat is required when nodes are not provided' });
+  }
+  if (typeof value.lon !== 'number') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['lon'], message: 'lon is required when nodes are not provided' });
+  }
+  if (typeof value.boundX !== 'number') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['boundX'], message: 'boundX is required when nodes are not provided' });
+  }
+  if (typeof value.boundZ !== 'number') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['boundZ'], message: 'boundZ is required when nodes are not provided' });
+  }
+});
 
 // Reverse lookup: "${classId}:${type}" → "class:type" string
 export const ReverseObjectTypeMap: Record<string, string> = {};

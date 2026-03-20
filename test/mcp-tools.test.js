@@ -16,7 +16,7 @@ const { setScopeAssociatedProfile } = await import('../dist/tools/scope-profile-
 const { handleBulkUpdate } = await import('../dist/tools/bulk.js');
 const { handleOpenScene } = await import('../dist/tools/scenes.js');
 const { serializeToolError } = await import('../dist/tools/errors.js');
-const { objectTools } = await import('../dist/tools/objects.js');
+const { objectTools, handleFindEarthAttachmentParent } = await import('../dist/tools/objects.js');
 const { resourceTools } = await import('../dist/tools/resources.js');
 const { computeChildScopeId } = await import('../dist/client/index.js');
 const { shapeSceneSummary, shapeObjectResponse } = await import('../dist/tools/response-shapers.js');
@@ -355,6 +355,28 @@ test('object and resource schemas enforce scope-native anchors/targets', () => {
   const parseMissingAnchor = listObjectsSchema.safeParse({ scopeId: 'fs1_a' });
   assert.equal(parseMissingAnchor.success, false);
 
+  const findObjectsSchema = objectTools.find_objects.inputSchema;
+  const parseImplicitAnchor = findObjectsSchema.safeParse({
+    scopeId: 'fs1_a',
+    query: { namePattern: 'Tree' },
+  });
+  assert.equal(parseImplicitAnchor.success, true);
+
+  const findEarthAttachmentParentSchema = objectTools.find_earth_attachment_parent.inputSchema;
+  assert.equal(findEarthAttachmentParentSchema.safeParse({ scopeId: 'fs1_a' }).success, false);
+  // boundX: 25, boundZ: 25 passes schema validation (min is 1m); the 0.1km extent check is in computeCampusGeometry
+  assert.equal(findEarthAttachmentParentSchema.safeParse({ scopeId: 'fs1_a', lat: 10, lon: 20, boundX: 25, boundZ: 25 }).success, true);
+  assert.equal(findEarthAttachmentParentSchema.safeParse({
+    scopeId: 'fs1_a',
+    nodes: [{ lat: 1, lon: 1 }, { lat: 2, lon: 2 }, { lat: 3, lon: 3 }],
+  }).success, false);
+  assert.equal(findEarthAttachmentParentSchema.safeParse({
+    scopeId: 'fs1_a',
+    lat: 28.3772,
+    lon: -81.5707,
+    boundX: 2500, boundZ: 2500,
+  }).success, true);
+
   const uploadSchema = resourceTools.upload_resource.inputSchema;
   const parseWithConflictField = uploadSchema.safeParse({
     profile: 'default',
@@ -432,6 +454,57 @@ test('shapeObjectResponse formats attachment objectType', () => {
   };
   const shaped = shapeObjectResponse('fs1_scope', obj);
   assert.equal(shaped.objectType, 'celestial:surface:attachment');
+});
+
+test('find_earth_attachment_parent delegates to the MCP client with resolved scope target', async () => {
+  const expected = {
+    parent: {
+      objectId: 'terrestrial:7',
+      name: 'Orange County',
+      objectType: 'terrestrial:county',
+      bound: { x: 100, y: 10, z: 100 },
+    },
+    sectorSubtype: 1,
+    attachment: {
+      latitude: 28.3772,
+      longitude: -81.5707,
+      radius: 6370249,
+      boundX: 5000,
+      boundY: 750,
+      boundZ: 5000,
+      height: 750,
+      depth: 750,
+    },
+    geocode: {
+      city: 'Bay Lake',
+      county: 'Orange County',
+      state: 'Florida',
+      country: 'United States',
+    },
+  };
+  let receivedArgs = null;
+  const client = createMockClient({
+    listScopes: () => [{ scopeId: 'fs1_scope', parentScopeId: null }],
+    findEarthAttachmentParent: async (args) => {
+      receivedArgs = args;
+      return expected;
+    },
+  });
+
+  const payload = JSON.parse(await handleFindEarthAttachmentParent(client, {
+    scopeId: 'fs1_scope',
+    lat: 28.3772,
+    lon: -81.5707,
+    boundX: 2500, boundZ: 2500,
+  }));
+
+  assert.deepEqual(receivedArgs, {
+    scopeId: 'fs1_scope',
+    lat: 28.3772,
+    lon: -81.5707,
+    boundX: 2500, boundZ: 2500,
+  });
+  assert.deepEqual(payload, expected);
 });
 
 test('open_scene response includes objectType', async () => {

@@ -5,10 +5,12 @@
 
 import type { IManifolderPromiseClient } from '../client/index.js';
 import type {
+  EarthAttachmentParentResult,
   BulkOperation,
   CreateObjectParams,
   FabricObject,
   FollowAttachmentResult,
+  FindEarthAttachmentParentParams,
   Scene,
   SearchQuery,
   ScopeInfo,
@@ -39,7 +41,8 @@ export interface ManifolderMCPClient {
     createdIds: string[];
     errors: string[];
   }>;
-  findObjects(args: { scopeId: string; anchorObjectId: string; query: SearchQuery }): Promise<FabricObject[]>;
+  findObjects(args: { scopeId: string; anchorObjectId?: string; query: SearchQuery }): Promise<FabricObject[]>;
+  findEarthAttachmentParent(args: { scopeId: string; anchorObjectId?: string } & FindEarthAttachmentParentParams): Promise<EarthAttachmentParentResult>;
 }
 
 export function asMCPClient(client: IManifolderPromiseClient): ManifolderMCPClient {

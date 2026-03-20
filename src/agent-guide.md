@@ -151,15 +151,33 @@ Reparents the object under a new parent.
 
 ### Searching Objects
 
-`find_objects` searches by name, position, or resource URL using an in-scope anchor object:
+`find_objects` searches by name, position, or resource URL using an in-scope anchor object. `anchorObjectId` is optional and defaults to the terrestrial root when omitted:
 
 ```
 find_objects(scopeId: "...", anchorObjectId: "physical:1", query: { namePattern: "Tree" })
 find_objects(scopeId: "...", anchorObjectId: "terrestrial:3", query: { positionRadius: { center: {x:0, y:0, z:0}, radius: 50 } })
 find_objects(scopeId: "...", anchorObjectId: "physical:1", query: { resourceUrl: "Forest.glb" })
+find_objects(scopeId: "...", query: { namePattern: "Bay Lake" })
 ```
 
 **How `namePattern` works:** On celestial and terrestrial scopes, `namePattern` is sent to the server as a begins-with prefix match (case-insensitive, efficient). On physical scopes, server-side SEARCH is not available — `namePattern` falls back to loading the full subtree under the scoped object and applying a client-side regex filter. Non-text queries (`positionRadius`, `resourceUrl`) always use client-side filtering on the loaded subtree.
+
+### Earth Attachment Parent Lookup
+
+`find_earth_attachment_parent` automates the Earth campus parent-selection workflow for terrestrial fabrics and returns both the chosen parent and the attachment geometry required to create the attachment point:
+
+```
+find_earth_attachment_parent(scopeId: "...", lat: 28.3772, lon: -81.5707, boundX: 2500, boundZ: 2500)
+find_earth_attachment_parent(scopeId: "...", city: "Bay Lake", state: "Florida", country: "United States", lat: 28.3772, lon: -81.5707, boundX: 1000, boundZ: 1000)
+find_earth_attachment_parent(scopeId: "...", nodes: [{lat: 39.716, lon: -75.121}, {lat: 39.703, lon: -75.112}, {lat: 39.711, lon: -75.128}, {lat: 39.708, lon: -75.111}])
+```
+
+Use it when you need the smallest terrestrial parent that can host a new Earth attachment. The result includes:
+
+- `parent` when a single node fully contains the campus, or `candidates` when no exact fit exists
+- `sectorSubtype` derived from campus extent
+- `attachment.latitude`, `attachment.longitude`, `attachment.radius`, `attachment.boundX`, `attachment.boundY`, `attachment.boundZ`, `attachment.height`, and `attachment.depth`
+- `geocode` fields resolved from the coordinate when reverse geocoding succeeds, with provided names used only to narrow search or fill missing reverse-geocode fields
 
 ## Scenes
 

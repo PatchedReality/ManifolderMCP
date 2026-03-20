@@ -115,6 +115,7 @@ Every tool that touches a scope accepts one of `scopeId`, `profile`, or `url` to
 | `get_object` | Get full object details |
 | `list_objects` | List loaded objects under an anchor (shallow, paginated) |
 | `find_objects` | Search by name, position radius, or resource URL (paginated) |
+| `find_earth_attachment_parent` | Find the smallest terrestrial parent for an Earth attachment and compute attachment geometry |
 | `create_object` | Create object (3D model, container, or action resource) |
 | `update_object` | Update name, transform, resource, bound, orbit, properties |
 | `delete_object` | Delete object and children |

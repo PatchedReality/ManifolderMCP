@@ -45,6 +45,7 @@ import {
   handleDeleteObject,
   handleMoveObject,
   handleFindObjects,
+  handleFindEarthAttachmentParent,
   bulkTools,
   handleBulkUpdate,
   resourceTools,
@@ -236,6 +237,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case 'find_objects':
         result = await handleFindObjects(client, args as Parameters<typeof handleFindObjects>[1]);
+        break;
+      case 'find_earth_attachment_parent':
+        result = await handleFindEarthAttachmentParent(client, args as Parameters<typeof handleFindEarthAttachmentParent>[1]);
         break;
 
       // Bulk tools

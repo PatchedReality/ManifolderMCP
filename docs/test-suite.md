@@ -167,6 +167,24 @@ Run these when you want deeper validation of edge behavior:
 
 ---
 
+## 9. `find_earth_attachment_parent` Manual Tests
+
+Requires a profile connected to an Earth fabric.
+
+| # | Action | Expected |
+|---|--------|----------|
+| 9.1 | `find_earth_attachment_parent(profile: "<EARTH_PROFILE>", lat: 28.3772, lon: -81.5707, boundX: 2500, boundZ: 2500)` | Returns `parent` with a valid terrestrial node (Bay Lake or containing ancestor). Response includes `sectorSubtype`, `attachment` block with `latitude`, `longitude`, `radius`, `boundX`, `boundY`, `boundZ`. |
+| 9.2 | `find_earth_attachment_parent(profile: "<EARTH_PROFILE>", lat: 28.3772, lon: -81.5707, boundX: 12500, boundZ: 12500)` | Campus exceeds Bay Lake bounds. Returns parent at county level or higher. |
+| 9.3 | `find_earth_attachment_parent(profile: "<EARTH_PROFILE>", lat: 28.3772, lon: -81.5707, boundX: 2500, boundZ: 2500, city: "Bay Lake", state: "Florida", country: "United States")` | Skips Nominatim. Returns same parent as 9.1. |
+| 9.4 | `find_earth_attachment_parent(profile: "<EARTH_PROFILE>", lat: 28.3772, lon: -81.5707, boundX: 25, boundZ: 25)` | Fails for extent < 100 meters. |
+| 9.5 | `find_earth_attachment_parent(profile: "<EARTH_PROFILE>", nodes: [{lat: 39.716, lon: -75.121}, {lat: 39.703, lon: -75.112}, {lat: 39.711, lon: -75.128}, {lat: 39.708, lon: -75.111}])` | Computes center from nodes (approximately Rowan University area). Returns valid parent with computed `attachment` values. |
+| 9.6 | `find_earth_attachment_parent(profile: "<EARTH_PROFILE>", lat: 39.7525, lon: -89.6500, boundX: 2500, boundZ: 2500, city: "Springfield")` | The coordinate is outside Springfield proper. Returns the same parent as the unnamed query for that point, proving provided names only reduce search space and do not override geometry. |
+| 9.7 | `find_earth_attachment_parent(profile: "<EARTH_PROFILE>", lat: 39.7982, lon: -89.6444, boundX: 2500, boundZ: 2500, city: "Springfield")` | Disambiguation test. Multiple "Springfield" entries exist; should return the Illinois Springfield result for this in-city coordinate. |
+| 9.8 | `find_earth_attachment_parent(profile: "<EARTH_PROFILE>", lat: 28.3772, lon: -81.5707, boundX: 250000, boundZ: 250000)` | Very large campus. Returns `candidates` when no single node fits, or a high-level parent such as state or country. |
+| 9.9 | `find_earth_attachment_parent(lat: 28.3772, lon: -81.5707, boundX: 2500, boundZ: 2500)` | With no profile or scope target, fails `SCOPE_TARGET_MISSING` or equivalent. |
+
+---
+
 ## Notes for Reviewers
 
 - If any step fails due to mismatched tool schema or unclear error semantics, record:
