@@ -67,7 +67,7 @@ export const findEarthAttachmentParentSchema = z.object({
   boundX: z.number().min(1).optional().describe('Campus east-west half-extent in meters (same semantics as bound.x on objects)'),
   boundZ: z.number().min(1).optional().describe('Campus north-south half-extent in meters (same semantics as bound.z on objects)'),
   boundY: z.number().min(1).optional().describe('Campus height in meters (optional — derived from sector subtype if omitted)'),
-  nodes: z.array(latLonSchema).min(4).optional().describe('Perimeter nodes (minimum 4). If provided, center, width, and depth are computed from them.'),
+  nodes: z.array(latLonSchema).min(2).optional().describe('Perimeter nodes (minimum 2). If provided, center, width, and depth are computed from them.'),
   city: z.string().optional(),
   community: z.string().optional(),
   county: z.string().optional(),

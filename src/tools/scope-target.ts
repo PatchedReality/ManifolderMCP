@@ -62,6 +62,9 @@ export async function resolveScopeTarget(
 
     try {
       registerUnsafeHosts(profile);
+      if (typeof profile.promiseTimeoutMs === 'number' && (client as any).promiseTimeoutMs !== undefined) {
+        (client as any).promiseTimeoutMs = profile.promiseTimeoutMs;
+      }
       (globalThis as any).__manifolderSSLErrors = [];
       const connected = await client.connectRoot({
         fabricUrl: profile.fabricUrl,

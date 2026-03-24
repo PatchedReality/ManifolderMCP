@@ -19,6 +19,8 @@ export interface ProfileConfig {
   resourceUrlPrefix?: string;
   // Hosts that need SSL certificate verification disabled (self-signed certs, incomplete chains)
   unsafeHosts?: string[];
+  // Timeout in ms for promise-based operations (waitForReady, mutation confirmation). Default: 5000
+  promiseTimeoutMs?: number;
 }
 
 export interface ManifolderMCPConfig {
