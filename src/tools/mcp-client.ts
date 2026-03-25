@@ -40,6 +40,10 @@ export interface ManifolderMCPClient {
     failed: number;
     createdIds: string[];
     errors: string[];
+    results: Array<
+      | { status: 'ok'; id?: string; confirmed?: boolean }
+      | { status: 'error'; message: string }
+    >;
   }>;
   findObjects(args: { scopeId: string; anchorObjectId?: string; query: SearchQuery }): Promise<FabricObject[]>;
   findEarthAttachmentParent(args: { scopeId: string; anchorObjectId?: string } & FindEarthAttachmentParentParams): Promise<EarthAttachmentParentResult>;

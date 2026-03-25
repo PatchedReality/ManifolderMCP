@@ -96,7 +96,11 @@ export async function handleBulkUpdate(
       }
       batches.push({
         scopeId: batch.scopeId,
-        ...result,
+        success: result.success,
+        failed: result.failed,
+        createdIds: result.createdIds,
+        errors: result.errors,
+        results: result.results,
       });
     } catch (error) {
       failed += batch.operations.length;
@@ -108,6 +112,7 @@ export async function handleBulkUpdate(
         failed: batch.operations.length,
         createdIds: [],
         errors: [message],
+        results: batch.operations.map((op) => ({ status: 'error' as const, message })),
       });
     }
   }

@@ -27,7 +27,7 @@ function createMockClient(overrides = {}) {
     listScopes: () => [],
     getScopeStatus: () => ({ connected: false }),
     connectRoot: async () => ({ scopeId: 'fs1_root' }),
-    bulkUpdate: async () => ({ success: 0, failed: 0, createdIds: [], errors: [] }),
+    bulkUpdate: async () => ({ success: 0, failed: 0, createdIds: [], errors: [], results: [] }),
     ...overrides,
   };
 }
@@ -186,7 +186,7 @@ test('bulk update returns CROSS_SCOPE_PARTIAL_FAILURE on mixed outcomes', async 
   const client = createMockClient({
     bulkUpdate: async ({ scopeId }) => {
       if (scopeId === 'fs1_ok') {
-        return { success: 1, failed: 0, createdIds: ['physical:1'], errors: [] };
+        return { success: 1, failed: 0, createdIds: ['physical:1'], errors: [], results: [{ status: 'ok' }] };
       }
       throw new Error('boom');
     },
@@ -231,6 +231,7 @@ test('bulk update returns OK when all batches succeed', async () => {
       failed: 0,
       createdIds: [scopeId === 'fs1_a' ? 'physical:11' : 'physical:22'],
       errors: [],
+      results: [{ status: 'ok', id: scopeId === 'fs1_a' ? 'physical:11' : 'physical:22', confirmed: true }],
     }),
   });
 
@@ -244,6 +245,104 @@ test('bulk update returns OK when all batches succeed', async () => {
   assert.equal(payload.code, 'OK');
   assert.equal(payload.summary.succeeded, 2);
   assert.equal(payload.summary.failed, 0);
+});
+
+test('bulk update includes per-operation results array', async () => {
+  const client = createMockClient({
+    bulkUpdate: async () => ({
+      success: 2,
+      failed: 1,
+      createdIds: ['physical:10', 'physical:11'],
+      errors: ['delete failed: not found'],
+      results: [
+        { status: 'ok', id: 'physical:10', confirmed: true },
+        { status: 'ok', id: 'physical:11', confirmed: false },
+        { status: 'error', message: 'delete failed: not found' },
+      ],
+    }),
+  });
+
+  const payload = JSON.parse(await handleBulkUpdate(client, {
+    scopeBatches: [
+      {
+        scopeId: 'fs1_a',
+        operations: [
+          { type: 'create', params: { parentId: 'physical:1', name: 'A' } },
+          { type: 'create', params: { parentId: 'physical:1', name: 'B' } },
+          { type: 'delete', params: { objectId: 'physical:99' } },
+        ],
+      },
+    ],
+  }));
+
+  assert.equal(payload.batches[0].results.length, 3);
+  assert.equal(payload.batches[0].results[0].status, 'ok');
+  assert.equal(payload.batches[0].results[0].id, 'physical:10');
+  assert.equal(payload.batches[0].results[0].confirmed, true);
+  assert.equal(payload.batches[0].results[1].confirmed, false);
+  assert.equal(payload.batches[0].results[2].status, 'error');
+});
+
+test('bulk update catch block includes per-operation error results', async () => {
+  const client = createMockClient({
+    bulkUpdate: async () => {
+      throw new Error('connection lost');
+    },
+  });
+
+  const payload = JSON.parse(await handleBulkUpdate(client, {
+    scopeBatches: [
+      {
+        scopeId: 'fs1_a',
+        operations: [
+          { type: 'create', params: { parentId: 'physical:1', name: 'A' } },
+          { type: 'create', params: { parentId: 'physical:1', name: 'B' } },
+        ],
+      },
+    ],
+  }));
+
+  assert.equal(payload.batches[0].results.length, 2);
+  assert.equal(payload.batches[0].results[0].status, 'error');
+  assert.equal(payload.batches[0].results[0].message, 'connection lost');
+  assert.equal(payload.batches[0].results[1].status, 'error');
+});
+
+test('_confirmMutation with tolerateTimeout resolves on MUTATION_TIMEOUT', async () => {
+  const { SingleScopeClient } = await import('../lib/ManifolderClient/ManifolderClient.js');
+  const client = new SingleScopeClient();
+  client.promiseTimeoutMs = 50; // 50ms for fast test
+
+  const result = await client._confirmMutation(
+    () => false, // never matches — will timeout
+    'test create',
+    50, // timeoutMs
+    0,  // minTimestamp
+    true // tolerateTimeout
+  );
+
+  assert.equal(result.confirmed, false);
+  assert.equal(result.timeout, true);
+});
+
+test('_confirmMutation without tolerateTimeout rejects on MUTATION_TIMEOUT', async () => {
+  const { SingleScopeClient } = await import('../lib/ManifolderClient/ManifolderClient.js');
+  const client = new SingleScopeClient();
+
+  await assert.rejects(
+    () => client._confirmMutation(
+      () => false,
+      'test create',
+      50,
+      0,
+      false // tolerateTimeout = false (default behavior)
+    ),
+    (err) => {
+      assert.equal(err.code, 'MUTATION_TIMEOUT');
+      assert.match(err.message, /Timeout waiting for mutation notification/);
+      return true;
+    }
+  );
 });
 
 test('open_scene returns get_object-equivalent payload plus url', async () => {
