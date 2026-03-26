@@ -308,6 +308,46 @@ test('bulk update catch block includes per-operation error results', async () =>
   assert.equal(payload.batches[0].results[1].status, 'error');
 });
 
+test('bulk update forwards options to client bulkUpdate', async () => {
+  let receivedOptions;
+  const client = createMockClient({
+    bulkUpdate: async ({ options }) => {
+      receivedOptions = options;
+      return { success: 1, failed: 0, createdIds: ['physical:1'], errors: [], results: [{ status: 'ok' }] };
+    },
+  });
+
+  const options = { concurrency: 25, confirmMode: 'optimistic' };
+  const payload = JSON.parse(await handleBulkUpdate(client, {
+    scopeBatches: [
+      { scopeId: 'fs1_a', operations: [{ type: 'create', params: { parentId: 'physical:1', name: 'A' } }] },
+    ],
+    options,
+  }));
+
+  assert.equal(payload.code, 'OK');
+  assert.deepStrictEqual(receivedOptions, options);
+});
+
+test('bulk update works without options (backward compat)', async () => {
+  let receivedOptions;
+  const client = createMockClient({
+    bulkUpdate: async ({ options }) => {
+      receivedOptions = options;
+      return { success: 1, failed: 0, createdIds: [], errors: [], results: [{ status: 'ok' }] };
+    },
+  });
+
+  const payload = JSON.parse(await handleBulkUpdate(client, {
+    scopeBatches: [
+      { scopeId: 'fs1_a', operations: [{ type: 'delete', params: { objectId: 'physical:1' } }] },
+    ],
+  }));
+
+  assert.equal(payload.code, 'OK');
+  assert.equal(receivedOptions, undefined);
+});
+
 test('_confirmMutation with tolerateTimeout resolves on MUTATION_TIMEOUT', async () => {
   const { SingleScopeClient } = await import('../lib/ManifolderClient/ManifolderClient.js');
   const client = new SingleScopeClient();

@@ -7,6 +7,7 @@ import type { IManifolderPromiseClient } from '../client/index.js';
 import type {
   EarthAttachmentParentResult,
   BulkOperation,
+  BulkUpdateOptions,
   CreateObjectParams,
   FabricObject,
   FollowAttachmentResult,
@@ -35,7 +36,7 @@ export interface ManifolderMCPClient {
   updateObject(args: { scopeId: string } & Omit<UpdateObjectParams, 'skipRefetch'>): Promise<FabricObject>;
   deleteObject(args: { scopeId: string; objectId: string }): Promise<void>;
   moveObject(args: { scopeId: string; objectId: string; newParentId: string }): Promise<FabricObject>;
-  bulkUpdate(args: { scopeId: string; operations: BulkOperation[] }): Promise<{
+  bulkUpdate(args: { scopeId: string; operations: BulkOperation[]; options?: BulkUpdateOptions }): Promise<{
     success: number;
     failed: number;
     createdIds: string[];

@@ -54,13 +54,22 @@ export const bulkTools = {
         scopeId: z.string(),
         operations: z.array(operationSchema),
       })).describe('Array of per-scope operation batches'),
+      options: z.object({
+        concurrency: z.number().int().min(1).max(100).default(10).optional()
+          .describe('Max concurrent operations (default: 10)'),
+        confirmMode: z.enum(['await', 'optimistic']).default('await').optional()
+          .describe('"await" waits for mutation confirmation; "optimistic" skips it'),
+      }).optional().describe('Performance tuning options'),
     }),
   },
 };
 
 export async function handleBulkUpdate(
   client: IManifolderPromiseClient,
-  args: { scopeBatches: Array<{ scopeId: string; operations: BulkOperation[] }> }
+  args: {
+    scopeBatches: Array<{ scopeId: string; operations: BulkOperation[] }>;
+    options?: { concurrency?: number; confirmMode?: 'await' | 'optimistic' };
+  }
 ): Promise<string> {
   const mcpClient = asMCPClient(client);
   const scopeIds = args.scopeBatches.map((batch) => batch.scopeId);
@@ -88,7 +97,7 @@ export async function handleBulkUpdate(
       return op;
     });
     try {
-      const result = await mcpClient.bulkUpdate({ scopeId: batch.scopeId, operations: resolvedOps as BulkOperation[] });
+      const result = await mcpClient.bulkUpdate({ scopeId: batch.scopeId, operations: resolvedOps as BulkOperation[], options: args.options });
       succeeded += result.success;
       failed += result.failed;
       if (result.errors.length > 0) {
