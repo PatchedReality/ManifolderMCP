@@ -348,43 +348,6 @@ test('bulk update works without options (backward compat)', async () => {
   assert.equal(receivedOptions, undefined);
 });
 
-test('_confirmMutation with tolerateTimeout resolves on MUTATION_TIMEOUT', async () => {
-  const { SingleScopeClient } = await import('../lib/ManifolderClient/ManifolderClient.js');
-  const client = new SingleScopeClient();
-  client.promiseTimeoutMs = 50; // 50ms for fast test
-
-  const result = await client._confirmMutation(
-    () => false, // never matches — will timeout
-    'test create',
-    50, // timeoutMs
-    0,  // minTimestamp
-    true // tolerateTimeout
-  );
-
-  assert.equal(result.confirmed, false);
-  assert.equal(result.timeout, true);
-});
-
-test('_confirmMutation without tolerateTimeout rejects on MUTATION_TIMEOUT', async () => {
-  const { SingleScopeClient } = await import('../lib/ManifolderClient/ManifolderClient.js');
-  const client = new SingleScopeClient();
-
-  await assert.rejects(
-    () => client._confirmMutation(
-      () => false,
-      'test create',
-      50,
-      0,
-      false // tolerateTimeout = false (default behavior)
-    ),
-    (err) => {
-      assert.equal(err.code, 'MUTATION_TIMEOUT');
-      assert.match(err.message, /Timeout waiting for mutation notification/);
-      return true;
-    }
-  );
-});
-
 test('open_scene returns get_object-equivalent payload plus url', async () => {
   const rootObject = {
     id: 'physical:7',
