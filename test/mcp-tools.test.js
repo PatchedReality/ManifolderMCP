@@ -186,7 +186,7 @@ test('bulk update returns CROSS_SCOPE_PARTIAL_FAILURE on mixed outcomes', async 
   const client = createMockClient({
     bulkUpdate: async ({ scopeId }) => {
       if (scopeId === 'fs1_ok') {
-        return { success: 1, failed: 0, createdIds: ['physical:1'], errors: [], results: [{ status: 'ok' }] };
+        return { success: 1, failed: 0, createdIds: ['physical:1'], errors: [], results: [{ status: 'ok', confirmed: true }] };
       }
       throw new Error('boom');
     },
@@ -313,7 +313,7 @@ test('bulk update forwards options to client bulkUpdate', async () => {
   const client = createMockClient({
     bulkUpdate: async ({ options }) => {
       receivedOptions = options;
-      return { success: 1, failed: 0, createdIds: ['physical:1'], errors: [], results: [{ status: 'ok' }] };
+      return { success: 1, failed: 0, createdIds: ['physical:1'], errors: [], results: [{ status: 'ok', confirmed: true }] };
     },
   });
 
@@ -334,7 +334,7 @@ test('bulk update works without options (backward compat)', async () => {
   const client = createMockClient({
     bulkUpdate: async ({ options }) => {
       receivedOptions = options;
-      return { success: 1, failed: 0, createdIds: [], errors: [], results: [{ status: 'ok' }] };
+      return { success: 1, failed: 0, createdIds: [], errors: [], results: [{ status: 'ok', confirmed: true }] };
     },
   });
 

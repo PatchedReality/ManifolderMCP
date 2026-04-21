@@ -48,17 +48,17 @@ const operationSchema = z.discriminatedUnion('type', [
 
 export const bulkTools = {
   bulk_update: {
-    description: 'Execute cross-scope batches: `scopeBatches[{ scopeId, operations }]`. Batches and operations run sequentially in best-effort mode. Operations must not depend on IDs produced earlier in the same request.',
+    description: 'Execute cross-scope batches: `scopeBatches[{ scopeId, operations }]`. Batches run sequentially; operations within a batch run concurrently (sliding window, up to `options.concurrency`, default 10). Operations must not depend on IDs produced earlier in the same request.',
     inputSchema: z.object({
       scopeBatches: z.array(z.object({
         scopeId: z.string(),
         operations: z.array(operationSchema),
       })).describe('Array of per-scope operation batches'),
       options: z.object({
-        concurrency: z.number().int().min(1).max(100).default(10).optional()
-          .describe('Max concurrent operations (default: 10)'),
-        confirmMode: z.enum(['await', 'optimistic']).default('await').optional()
-          .describe('"await" waits for mutation confirmation; "optimistic" skips it'),
+        concurrency: z.number().int().min(1).max(100).optional()
+          .describe('Max concurrent operations within a batch (default: 10)'),
+        confirmMode: z.enum(['await', 'optimistic']).optional()
+          .describe('"await" waits for mutation confirmation; "optimistic" skips it (default: "await")'),
       }).optional().describe('Performance tuning options'),
     }),
   },
