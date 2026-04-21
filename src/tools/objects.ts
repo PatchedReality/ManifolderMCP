@@ -5,7 +5,7 @@
 
 import { z } from 'zod';
 import type { IManifolderPromiseClient } from '../client/index.js';
-import type { CreateObjectParams, EarthAttachmentParentResult, FabricObject, UpdateObjectParams } from '../types.js';
+import type { CreateObjectParams, EarthAttachmentParentResult, FabricObject, MutatedObject, UpdateObjectParams } from '../types.js';
 import { objectTypeSchema, resolveCompositeObjectType, transformFields, celestialFields, vector3Schema, scopeTargetParams, findEarthAttachmentParentSchema } from './schemas.js';
 import { paginate } from '../output.js';
 import { resolveScopeTarget } from './scope-target.js';
@@ -145,8 +145,8 @@ export async function handleCreateObject(
   });
   const { objectType: compositeType, subtype: _sub, ...rest } = stripScopeTarget(args);
   const resolved = compositeType ? resolveCompositeObjectType(compositeType) : {};
-  const obj = await mcpClient.createObject({ scopeId: target.scopeId, ...rest, ...resolved }) as FabricObject;
-  return JSON.stringify(shapeObjectResponse(target.scopeId, obj));
+  const obj = await mcpClient.createObject({ scopeId: target.scopeId, ...rest, ...resolved }) as MutatedObject;
+  return JSON.stringify({ ...shapeObjectResponse(target.scopeId, obj), confirmed: obj.confirmed });
 }
 
 export async function handleUpdateObject(
@@ -160,8 +160,8 @@ export async function handleUpdateObject(
   });
   const { objectType: compositeType, subtype: _sub, ...rest } = stripScopeTarget(args);
   const resolved = compositeType ? resolveCompositeObjectType(compositeType) : {};
-  const obj = await mcpClient.updateObject({ scopeId: target.scopeId, ...rest, ...resolved }) as FabricObject;
-  return JSON.stringify(shapeObjectResponse(target.scopeId, obj));
+  const obj = await mcpClient.updateObject({ scopeId: target.scopeId, ...rest, ...resolved }) as MutatedObject;
+  return JSON.stringify({ ...shapeObjectResponse(target.scopeId, obj), confirmed: obj.confirmed });
 }
 
 export async function handleDeleteObject(
@@ -173,8 +173,8 @@ export async function handleDeleteObject(
     allowImplicitFallback: false,
     isCUD: true,
   });
-  await mcpClient.deleteObject({ scopeId: target.scopeId, objectId: args.objectId });
-  return JSON.stringify({ success: true, scopeId: target.scopeId, deletedObjectId: args.objectId });
+  const result = await mcpClient.deleteObject({ scopeId: target.scopeId, objectId: args.objectId });
+  return JSON.stringify({ success: true, scopeId: target.scopeId, deletedObjectId: args.objectId, confirmed: result.confirmed });
 }
 
 export async function handleMoveObject(
@@ -190,8 +190,8 @@ export async function handleMoveObject(
     scopeId: target.scopeId,
     objectId: args.objectId,
     newParentId: args.newParentId,
-  }) as FabricObject;
-  return JSON.stringify(shapeObjectResponse(target.scopeId, moved));
+  }) as MutatedObject;
+  return JSON.stringify({ ...shapeObjectResponse(target.scopeId, moved), confirmed: moved.confirmed });
 }
 
 export async function handleFindObjects(

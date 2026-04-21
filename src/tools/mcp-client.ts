@@ -7,8 +7,10 @@ import type { IManifolderPromiseClient } from '../client/index.js';
 import type {
   EarthAttachmentParentResult,
   BulkOperation,
+  BulkUpdateOptions,
   CreateObjectParams,
   FabricObject,
+  MutatedObject,
   FollowAttachmentResult,
   FindEarthAttachmentParentParams,
   Scene,
@@ -31,15 +33,19 @@ export interface ManifolderMCPClient {
   deleteScene(args: { scopeId: string; sceneId: string }): Promise<void>;
   listObjects(args: { scopeId: string; anchorObjectId: string; filter?: { namePattern?: string; type?: string } }): Promise<FabricObject[]>;
   getObject(args: { scopeId: string; objectId: string }): Promise<FabricObject>;
-  createObject(args: { scopeId: string } & Omit<CreateObjectParams, 'skipParentRefetch'>): Promise<FabricObject>;
-  updateObject(args: { scopeId: string } & Omit<UpdateObjectParams, 'skipRefetch'>): Promise<FabricObject>;
-  deleteObject(args: { scopeId: string; objectId: string }): Promise<void>;
-  moveObject(args: { scopeId: string; objectId: string; newParentId: string }): Promise<FabricObject>;
-  bulkUpdate(args: { scopeId: string; operations: BulkOperation[] }): Promise<{
+  createObject(args: { scopeId: string } & Omit<CreateObjectParams, 'skipParentRefetch' | 'tolerateTimeout' | 'mutationTimeoutMs' | 'skipConfirmation'>): Promise<MutatedObject>;
+  updateObject(args: { scopeId: string } & Omit<UpdateObjectParams, 'skipRefetch' | 'tolerateTimeout' | 'mutationTimeoutMs' | 'skipConfirmation'>): Promise<MutatedObject>;
+  deleteObject(args: { scopeId: string; objectId: string }): Promise<{ confirmed: boolean }>;
+  moveObject(args: { scopeId: string; objectId: string; newParentId: string }): Promise<MutatedObject>;
+  bulkUpdate(args: { scopeId: string; operations: BulkOperation[]; options?: BulkUpdateOptions }): Promise<{
     success: number;
     failed: number;
     createdIds: string[];
     errors: string[];
+    results: Array<
+      | { status: 'ok'; id?: string; confirmed: boolean }
+      | { status: 'error'; message: string }
+    >;
   }>;
   findObjects(args: { scopeId: string; anchorObjectId?: string; query: SearchQuery }): Promise<FabricObject[]>;
   findEarthAttachmentParent(args: { scopeId: string; anchorObjectId?: string } & FindEarthAttachmentParentParams): Promise<EarthAttachmentParentResult>;

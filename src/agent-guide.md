@@ -322,18 +322,31 @@ Defaults to `{x:1, y:1, z:1}` if omitted.
 
 ### Bulk Object Operations
 
-`bulk_update` executes multiple object operations in a single batch. Operations execute sequentially; failures are collected but don't stop subsequent operations. Operations cannot reference IDs created by earlier operations in the same batch.
+`bulk_update` executes multiple object operations grouped by scope. Batches run sequentially across scopes; within a batch, operations run concurrently via a sliding window (default 10 in flight, configurable 1–100 via `options.concurrency`). Failures are collected but don't stop subsequent operations. Operations cannot reference IDs created by earlier operations in the same batch.
+
+Input is `scopeBatches: [{ scopeId, operations }]` with an optional top-level `options` object:
 
 ```
-bulk_update(operations: [
-  { type: "create", params: { parentId: "terrestrial:3", name: "Obj1", resourceReference: "<url from upload_resource>" } },
-  { type: "update", params: { objectId: "physical:42", position: {x:10, y:0, z:0} } },
-  { type: "delete", params: { objectId: "physical:99" } },
-  { type: "move",   params: { objectId: "physical:50", newParentId: "terrestrial:3" } }
-])
+bulk_update(scopeBatches: [{
+  scopeId: "...",
+  operations: [
+    { type: "create", params: { parentId: "terrestrial:3", name: "Obj1", resourceReference: "<url from upload_resource>" } },
+    { type: "update", params: { objectId: "physical:42", position: {x:10, y:0, z:0} } },
+    { type: "delete", params: { objectId: "physical:99" } },
+    { type: "move",   params: { objectId: "physical:50", newParentId: "terrestrial:3" } }
+  ]
+}], options: { concurrency: 20, confirmMode: "await" })
 ```
 
-`bulk_update` input is `scopeBatches: [{ scopeId, operations }]`. Response codes: `CROSS_SCOPE_PARTIAL_FAILURE` (mixed), `CROSS_SCOPE_FAILURE` (all failed), `OK` (all succeeded).
+**`options.confirmMode`** (`"await"` default, or `"optimistic"`):
+- `await` waits for each mutation's confirmation notification before resolving. Confirmation timeouts surface as per-operation failures.
+- `optimistic` returns as soon as the server accepts each command, without waiting for confirmation. Use for large high-volume batches where you don't need per-op confirmation and can tolerate uncertainty about individual outcomes (re-read via `get_object`/`list_objects` if you need to verify).
+
+Each batch in the response includes:
+- `success`, `failed`, `createdIds`, `errors` — aggregate counters; `createdIds` is in completion order.
+- `results[i]` — per-operation outcome in **input order**, shaped as `{ status: "ok", id?, confirmed }` or `{ status: "error", message }`. `confirmed` is `true` when the mutation notification arrived, `false` when it was skipped (`optimistic` mode) or the confirmation wait timed out. Use `results[i].id` to map a created ID back to its source operation.
+
+Top-level response codes: `CROSS_SCOPE_PARTIAL_FAILURE` (mixed), `CROSS_SCOPE_FAILURE` (all failed), `OK` (all succeeded).
 
 ### Bulk Resource Operations
 
@@ -388,6 +401,7 @@ Fabric scenes and resource libraries can be large — hundreds of objects per sc
 Key response shapes by tool:
 
 - Object-returning tools include: `{ scopeId, id, nodeUid, parentId, parentNodeUid, objectType, ... }`
+- Mutation tools (`create_object`, `update_object`, `delete_object`, `move_object`) include `confirmed: boolean`. `true` means the mutation notification arrived within the timeout; `false` means the server likely completed the operation but the confirmation didn't arrive in time — re-read via `get_object` or `list_objects` if you need to verify state.
 - `open_scene` → `{ scopeId, id, nodeUid, parentId, parentNodeUid, objectType, name, position, rotation, scale, resourceReference, resourceName, bound, childCount, children, orbit, properties, url }`
 - `list_scenes` and `create_scene` include `{ scopeId, id, name, rootObjectId, url }`
 - `follow_attachment` includes `{ parentScopeId, attachmentNodeUid, childScopeId, childFabricUrl, associatedProfile, reused, root? }`

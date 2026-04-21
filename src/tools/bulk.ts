@@ -48,19 +48,28 @@ const operationSchema = z.discriminatedUnion('type', [
 
 export const bulkTools = {
   bulk_update: {
-    description: 'Execute cross-scope batches: `scopeBatches[{ scopeId, operations }]`. Batches and operations run sequentially in best-effort mode. Operations must not depend on IDs produced earlier in the same request.',
+    description: 'Execute cross-scope batches: `scopeBatches[{ scopeId, operations }]`. Batches run sequentially; operations within a batch run concurrently (sliding window, up to `options.concurrency`, default 10). Operations must not depend on IDs produced earlier in the same request.',
     inputSchema: z.object({
       scopeBatches: z.array(z.object({
         scopeId: z.string(),
         operations: z.array(operationSchema),
       })).describe('Array of per-scope operation batches'),
+      options: z.object({
+        concurrency: z.number().int().min(1).max(100).optional()
+          .describe('Max concurrent operations within a batch (default: 10)'),
+        confirmMode: z.enum(['await', 'optimistic']).optional()
+          .describe('"await" waits for mutation confirmation; "optimistic" skips it (default: "await")'),
+      }).optional().describe('Performance tuning options'),
     }),
   },
 };
 
 export async function handleBulkUpdate(
   client: IManifolderPromiseClient,
-  args: { scopeBatches: Array<{ scopeId: string; operations: BulkOperation[] }> }
+  args: {
+    scopeBatches: Array<{ scopeId: string; operations: BulkOperation[] }>;
+    options?: { concurrency?: number; confirmMode?: 'await' | 'optimistic' };
+  }
 ): Promise<string> {
   const mcpClient = asMCPClient(client);
   const scopeIds = args.scopeBatches.map((batch) => batch.scopeId);
@@ -88,7 +97,7 @@ export async function handleBulkUpdate(
       return op;
     });
     try {
-      const result = await mcpClient.bulkUpdate({ scopeId: batch.scopeId, operations: resolvedOps as BulkOperation[] });
+      const result = await mcpClient.bulkUpdate({ scopeId: batch.scopeId, operations: resolvedOps as BulkOperation[], options: args.options });
       succeeded += result.success;
       failed += result.failed;
       if (result.errors.length > 0) {
@@ -96,7 +105,11 @@ export async function handleBulkUpdate(
       }
       batches.push({
         scopeId: batch.scopeId,
-        ...result,
+        success: result.success,
+        failed: result.failed,
+        createdIds: result.createdIds,
+        errors: result.errors,
+        results: result.results,
       });
     } catch (error) {
       failed += batch.operations.length;
@@ -108,6 +121,7 @@ export async function handleBulkUpdate(
         failed: batch.operations.length,
         createdIds: [],
         errors: [message],
+        results: batch.operations.map((op) => ({ status: 'error' as const, message })),
       });
     }
   }
