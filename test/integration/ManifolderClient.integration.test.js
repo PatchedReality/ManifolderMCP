@@ -109,6 +109,7 @@ function buildEnvTarget() {
     fabricUrl,
     adminKey: process.env.FABRIC_IT_ADMIN_KEY || process.env.FABRIC_ADMIN_KEY || '',
     source: 'env',
+    unsafeHosts: [],
   };
 }
 
@@ -129,6 +130,7 @@ async function buildConfigTarget() {
     fabricUrl: profile.fabricUrl,
     adminKey: profile.adminKey || '',
     source: `profile:${profileName}`,
+    unsafeHosts: Array.isArray(profile.unsafeHosts) ? profile.unsafeHosts : [],
   };
 }
 
@@ -146,6 +148,7 @@ function buildEarthEnvTarget() {
     fabricUrl,
     adminKey: process.env.EARTH_IT_ADMIN_KEY || '',
     source: 'earth-env',
+    unsafeHosts: EARTH_UNSAFE_HOSTS,
   };
 }
 
@@ -170,6 +173,10 @@ async function buildEarthConfigTarget() {
     fabricUrl: profile.fabricUrl,
     adminKey: profile.adminKey || '',
     source: `earth-profile:${profileName}`,
+    unsafeHosts: [
+      ...(Array.isArray(profile.unsafeHosts) ? profile.unsafeHosts : []),
+      ...EARTH_UNSAFE_HOSTS,
+    ],
   };
 }
 
@@ -374,7 +381,7 @@ test('integration: earth attachment parent lookup returns Bay Lake for the Disne
 
   const client = createManifolderPromiseClient();
   try {
-    registerUnsafeHosts(EARTH_UNSAFE_HOSTS);
+    registerUnsafeHosts(target.unsafeHosts);
     const connection = await client.connectRoot({
       fabricUrl: target.fabricUrl,
       adminKey: target.adminKey,
@@ -414,7 +421,7 @@ test('integration: earth attachment parent lookup finds a sector for the Disney 
 
   const client = createManifolderPromiseClient();
   try {
-    registerUnsafeHosts(EARTH_UNSAFE_HOSTS);
+    registerUnsafeHosts(target.unsafeHosts);
     const connection = await client.connectRoot({
       fabricUrl: target.fabricUrl,
       adminKey: target.adminKey,
@@ -450,7 +457,7 @@ test('integration: earth attachment parent lookup accepts caller-provided locati
 
   const client = createManifolderPromiseClient();
   try {
-    registerUnsafeHosts(EARTH_UNSAFE_HOSTS);
+    registerUnsafeHosts(target.unsafeHosts);
     const connection = await client.connectRoot({
       fabricUrl: target.fabricUrl,
       adminKey: target.adminKey,
@@ -488,7 +495,7 @@ test('integration: earth attachment parent lookup keeps names as search hints wh
 
   const client = createManifolderPromiseClient();
   try {
-    registerUnsafeHosts(EARTH_UNSAFE_HOSTS);
+    registerUnsafeHosts(target.unsafeHosts);
     const connection = await client.connectRoot({
       fabricUrl: target.fabricUrl,
       adminKey: target.adminKey,
@@ -533,7 +540,7 @@ test('integration: earth attachment parent lookup can disambiguate Springfield w
 
   const client = createManifolderPromiseClient();
   try {
-    registerUnsafeHosts(EARTH_UNSAFE_HOSTS);
+    registerUnsafeHosts(target.unsafeHosts);
     const connection = await client.connectRoot({
       fabricUrl: target.fabricUrl,
       adminKey: target.adminKey,
@@ -578,7 +585,7 @@ test('integration: earth attachment parent lookup computes center and bounds fro
 
   const client = createManifolderPromiseClient();
   try {
-    registerUnsafeHosts(EARTH_UNSAFE_HOSTS);
+    registerUnsafeHosts(target.unsafeHosts);
     const connection = await client.connectRoot({
       fabricUrl: target.fabricUrl,
       adminKey: target.adminKey,
