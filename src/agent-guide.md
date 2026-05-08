@@ -176,7 +176,8 @@ Use it when you need the smallest terrestrial parent that can host a new Earth a
 
 - `parent` when a single node fully contains the campus, or `candidates` when no exact fit exists
 - `sectorSubtype` derived from campus extent
-- `attachment.latitude`, `attachment.longitude`, `attachment.radius`, `attachment.boundX`, `attachment.boundY`, `attachment.boundZ`, `attachment.height`, and `attachment.depth`
+- `attachment.latitude`, `attachment.longitude`, `attachment.radius` (the campus's adjusted radius, ≈ `R − depth_sector` from planet center), `attachment.boundX`, `attachment.boundY`, `attachment.boundZ`, `attachment.height`, and `attachment.depth`
+- `planet.radius` (the actual planet radius — Earth's, since this function is Earth-specific), `planet.matrix`, `planet.matrixInverse`, and `planet.subsurface.{tnGeometry, dA, dB, dC}` where `dC` carries the sector's adjusted radius (the radial distance from planet center where the matrix's local Y=0 sits). To compute the sector's depth below planet surface, use `planet.radius − planet.subsurface.dC`.
 - `geocode` fields resolved from the coordinate when reverse geocoding succeeds, with provided names used only to narrow search or fill missing reverse-geocode fields
 
 ## Scenes
