@@ -5,7 +5,8 @@
 
 import SftpClient from 'ssh2-sftp-client';
 import { readFile, mkdir } from 'fs/promises';
-import { basename, dirname, join } from 'path';
+import { basename, dirname } from 'path';
+import { basename as posixBasename, dirname as posixDirname, join } from 'path/posix';
 import { expandPath, type ProfileConfig } from '../config.js';
 
 export interface UploadResult {
@@ -73,7 +74,7 @@ export class ScpStorage {
   }
 
   private async ensureRemoteDir(sftp: SftpClient, remotePath: string, basePath: string): Promise<void> {
-    const remoteDir = dirname(remotePath);
+    const remoteDir = posixDirname(remotePath);
     if (remoteDir !== basePath) {
       await sftp.mkdir(remoteDir, true);
     }
@@ -135,7 +136,7 @@ export class ScpStorage {
       if (filter) {
         const escaped = filter.replace(/[.+^${}()|[\]\\]/g, '\\$&');
         const pattern = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$', 'i');
-        return results.filter(r => pattern.test(basename(r.name)));
+        return results.filter(r => pattern.test(posixBasename(r.name)));
       }
 
       return results;
