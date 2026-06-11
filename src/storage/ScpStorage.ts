@@ -6,29 +6,24 @@
 import SftpClient from 'ssh2-sftp-client';
 import { readFile, mkdir } from 'fs/promises';
 import { basename, dirname } from 'path';
-import { basename as posixBasename, dirname as posixDirname, join } from 'path/posix';
+import { dirname as posixDirname, join } from 'path/posix';
 import { expandPath, type ProfileConfig } from '../config.js';
+import {
+  validateResourcePath,
+  globFilter,
+  type FileStorage,
+  type UploadResult,
+  type ResourceInfo,
+} from './FileStorage.js';
 
-export interface UploadResult {
-  url: string;
-  filename: string;
-}
-
-export interface ResourceInfo {
-  name: string;
-  url: string;
-  size: number;
-  lastModified: Date;
-}
-
-export class ScpStorage {
+export class ScpStorage implements FileStorage {
   private config: ProfileConfig;
 
   constructor(config: ProfileConfig) {
     this.config = config;
   }
 
-  isConfigured(): boolean {
+  private isConfigured(): boolean {
     return !!(this.config.scpHost && this.config.scpUser && this.config.scpKeyPath && this.config.scpRemotePath && this.config.resourceUrlPrefix);
   }
 
@@ -62,15 +57,6 @@ export class ScpStorage {
       remotePath = remotePath.replace('~', cwd);
     }
     return remotePath;
-  }
-
-  private validateResourcePath(basePath: string, resourceName: string): string {
-    const resolved = join(basePath, resourceName);
-    const normalizedBase = basePath.endsWith('/') ? basePath : basePath + '/';
-    if (!resolved.startsWith(normalizedBase)) {
-      throw new Error(`Invalid resource path: "${resourceName}" escapes resource directory`);
-    }
-    return resolved;
   }
 
   private async ensureRemoteDir(sftp: SftpClient, remotePath: string, basePath: string): Promise<void> {
@@ -133,13 +119,7 @@ export class ScpStorage {
 
       await listDir(targetPath, prefix);
 
-      if (filter) {
-        const escaped = filter.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-        const pattern = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$', 'i');
-        return results.filter(r => pattern.test(posixBasename(r.name)));
-      }
-
-      return results;
+      return filter ? globFilter(results, filter) : results;
     } finally {
       await sftp.end();
     }
@@ -150,7 +130,7 @@ export class ScpStorage {
 
     try {
       const baseRemotePath = await this.getRemotePath(sftp);
-      const remotePath = this.validateResourcePath(baseRemotePath, resourceName);
+      const remotePath = validateResourcePath(baseRemotePath, resourceName);
 
       const exists = await sftp.exists(remotePath);
       if (!exists) {
@@ -171,8 +151,8 @@ export class ScpStorage {
 
     try {
       const baseRemotePath = await this.getRemotePath(sftp);
-      const sourcePath = this.validateResourcePath(baseRemotePath, sourceName);
-      const destPath = this.validateResourcePath(baseRemotePath, destName);
+      const sourcePath = validateResourcePath(baseRemotePath, sourceName);
+      const destPath = validateResourcePath(baseRemotePath, destName);
 
       const exists = await sftp.exists(sourcePath);
       if (!exists) {
@@ -191,11 +171,6 @@ export class ScpStorage {
     } finally {
       await sftp.end();
     }
-  }
-
-  getBaseUrl(): string {
-    this.ensureConfigured();
-    return this.config.resourceUrlPrefix!;
   }
 
   async bulkUpload(files: Array<{ localPath: string; targetName?: string }>): Promise<{
@@ -249,7 +224,7 @@ export class ScpStorage {
 
       for (const name of resourceNames) {
         try {
-          const remotePath = this.validateResourcePath(baseRemotePath, name);
+          const remotePath = validateResourcePath(baseRemotePath, name);
           const exists = await sftp.exists(remotePath);
 
           if (!exists) {
@@ -298,8 +273,8 @@ export class ScpStorage {
 
       for (const move of moves) {
         try {
-          const sourcePath = this.validateResourcePath(baseRemotePath, move.sourceName);
-          const destPath = this.validateResourcePath(baseRemotePath, move.destName);
+          const sourcePath = validateResourcePath(baseRemotePath, move.sourceName);
+          const destPath = validateResourcePath(baseRemotePath, move.destName);
           const exists = await sftp.exists(sourcePath);
 
           if (!exists) {

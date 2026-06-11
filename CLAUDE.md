@@ -33,7 +33,7 @@ npm run test:record-fixtures     # Record test fixtures from live server
   - `actionResources.ts` — validate/schema for action resources (lights, text, rotators, video)
   - `schemas.ts` — shared Zod schemas for tool parameters
 - **Output** (`src/output.ts`): Pagination helper for list responses
-- **Storage** (`src/storage/ScpStorage.ts`): SCP/SSH-based file storage via `ssh2-sftp-client`
+- **Storage** (`src/storage/`): `FileStorage` interface with two transports — `WebDavStorage` (WebDAV over HTTPS, when `filesUrl` is set) and `ScpStorage` (SCP/SSH via `ssh2-sftp-client`); selected per profile by `createFileStorage`
 - **Agent Guide** (`src/agent-guide.md`): Tool usage documentation served to MCP clients
 
 ### Vendor Libraries
@@ -47,7 +47,12 @@ To update vendor libs: run `./scripts/sync-vendor.sh` in the ManifolderClient re
 
 ### Storage
 
-SCP/SSH-based storage for uploading resources (.glb, .png, etc.) via `ssh2-sftp-client`. Config fields: `scpHost`, `scpUser`, `scpRemotePath`, `scpKeyPath`, and `resourceUrlPrefix` (URL prefix for referencing uploads in scenes, e.g. `/objects/`).
+Resource files (.glb, .png, etc.) upload/download through a `FileStorage` interface (`src/storage/FileStorage.ts`) with two interchangeable transports, selected per profile by `createFileStorage` (`src/storage/createFileStorage.ts`):
+
+- **`WebDavStorage`** (`src/storage/WebDavStorage.ts`) — used when `filesUrl` is set. Standard WebDAV verbs (PROPFIND/PUT/GET/DELETE/MOVE/MKCOL) over `node:https`, authenticated with `adminKey` as a bearer token. Per-host TLS bypass honors `unsafeHosts`; uploads send an explicit `Content-Length`.
+- **`ScpStorage`** (`src/storage/ScpStorage.ts`) — used when `filesUrl` is absent. SCP/SSH via `ssh2-sftp-client`. Config fields: `scpHost`, `scpUser`, `scpRemotePath`, `scpKeyPath`.
+
+Both share `resourceUrlPrefix` (URL prefix for referencing uploads in scenes, e.g. `/objects/`) and the path-escape guard in `FileStorage.ts`.
 
 ### MVMF Protocol
 
@@ -84,6 +89,18 @@ Server config lives at `~/.config/manifolder-mcp/config.json`:
     "scpUser": "deploy",
     "scpRemotePath": "/var/www/objects/",
     "scpKeyPath": "~/.ssh/id_rsa",
+    "resourceUrlPrefix": "/objects/"
+  }
+}
+```
+
+Resource transport is selected per profile: set `filesUrl` (an `https://` WebDAV endpoint) to use the WebDAV transport — authenticated with `adminKey` as a bearer token — instead of the SCP fields above. A WebDAV profile drops `scpHost`/`scpUser`/`scpRemotePath`/`scpKeyPath` and keeps `resourceUrlPrefix`:
+```json
+{
+  "default": {
+    "fabricUrl": "https://example.com/fabric/fabric.msf",
+    "adminKey": "your-admin-token",
+    "filesUrl": "https://files-earth.example.com/",
     "resourceUrlPrefix": "/objects/"
   }
 }

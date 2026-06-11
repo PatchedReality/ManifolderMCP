@@ -15,6 +15,10 @@ export interface ProfileConfig {
   scpUser?: string;
   scpRemotePath?: string;
   scpKeyPath?: string;
+  // WebDAV endpoint for resource file operations (e.g. "https://files-name.example.com/").
+  // When present, file operations use the WebDAV transport with `adminKey` as the bearer
+  // token; when absent, the SCP/SSH transport is used.
+  filesUrl?: string;
   // URL prefix for referencing uploaded resources in scenes (e.g. "/objects/")
   resourceUrlPrefix?: string;
   // Hosts that need SSL certificate verification disabled (self-signed certs, incomplete chains)

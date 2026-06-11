@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import type { ScpStorage } from '../storage/ScpStorage.js';
+import type { FileStorage } from '../storage/FileStorage.js';
 import { paginate } from '../output.js';
 import { resolveProfileTarget } from './scope-target.js';
 
@@ -91,7 +91,7 @@ export const resourceTools = {
 };
 
 export async function handleUploadResource(
-  storage: ScpStorage,
+  storage: FileStorage,
   args: { profile: string; localPath: string; targetName?: string }
 ): Promise<string> {
   await resolveProfileTarget(args);
@@ -100,7 +100,7 @@ export async function handleUploadResource(
 }
 
 export async function handleListResources(
-  storage: ScpStorage,
+  storage: FileStorage,
   args: { profile: string; path?: string; filter?: string; recursive?: boolean; offset?: number; limit?: number }
 ): Promise<string> {
   await resolveProfileTarget(args);
@@ -114,7 +114,7 @@ export async function handleListResources(
 }
 
 export async function handleDeleteResource(
-  storage: ScpStorage,
+  storage: FileStorage,
   args: { profile: string; resourceName: string }
 ): Promise<string> {
   await resolveProfileTarget(args);
@@ -123,7 +123,7 @@ export async function handleDeleteResource(
 }
 
 export async function handleMoveResource(
-  storage: ScpStorage,
+  storage: FileStorage,
   args: { profile: string; sourceName: string; destName: string }
 ): Promise<string> {
   await resolveProfileTarget(args);
@@ -132,7 +132,7 @@ export async function handleMoveResource(
 }
 
 export async function handleBulkUploadResources(
-  storage: ScpStorage,
+  storage: FileStorage,
   args: { profile: string; files: Array<{ localPath: string; targetName?: string }> }
 ): Promise<string> {
   await resolveProfileTarget(args);
@@ -146,7 +146,7 @@ export async function handleBulkUploadResources(
 }
 
 export async function handleBulkDeleteResources(
-  storage: ScpStorage,
+  storage: FileStorage,
   args: { profile: string; resourceNames: string[] }
 ): Promise<string> {
   await resolveProfileTarget(args);
@@ -161,7 +161,7 @@ export async function handleBulkDeleteResources(
 }
 
 export async function handleBulkMoveResources(
-  storage: ScpStorage,
+  storage: FileStorage,
   args: { profile: string; moves: Array<{ sourceName: string; destName: string }> }
 ): Promise<string> {
   await resolveProfileTarget(args);
@@ -176,7 +176,7 @@ export async function handleBulkMoveResources(
 }
 
 export async function handleDownloadResource(
-  storage: ScpStorage,
+  storage: FileStorage,
   args: { profile: string; resourceName: string; localPath: string }
 ): Promise<string> {
   await resolveProfileTarget(args);
@@ -185,7 +185,7 @@ export async function handleDownloadResource(
 }
 
 export async function handleBulkDownloadResources(
-  storage: ScpStorage,
+  storage: FileStorage,
   args: { profile: string; downloads: Array<{ resourceName: string; localPath: string }> }
 ): Promise<string> {
   await resolveProfileTarget(args);

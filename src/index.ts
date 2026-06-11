@@ -22,7 +22,8 @@ import {
 } from './client/index.js';
 import type { IManifolderPromiseClient } from './client/index.js';
 import { getProfile } from './config.js';
-import { ScpStorage } from './storage/ScpStorage.js';
+import { createFileStorage } from './storage/createFileStorage.js';
+import type { FileStorage } from './storage/FileStorage.js';
 
 import {
   connectionTools,
@@ -81,9 +82,9 @@ const server = new Server(
 );
 
 const client: IManifolderPromiseClient = createManifolderPromiseClient();
-const storageByProfile = new Map<string, ScpStorage>();
+const storageByProfile = new Map<string, FileStorage>();
 
-async function getStorage(profileName: string): Promise<ScpStorage> {
+async function getStorage(profileName: string): Promise<FileStorage> {
   if (!profileName) {
     throw new Error('profile is required');
   }
@@ -92,7 +93,7 @@ async function getStorage(profileName: string): Promise<ScpStorage> {
     return existing;
   }
   const profile = await getProfile(profileName);
-  const storage = new ScpStorage(profile);
+  const storage = createFileStorage(profile);
   storageByProfile.set(profileName, storage);
   return storage;
 }
