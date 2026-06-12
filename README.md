@@ -42,7 +42,16 @@ Create `~/.config/manifolder-mcp/config.json`:
 }
 ```
 
-Optional fields for resource upload/download via SCP:
+Resource upload/download uses one of two transports, selected automatically per profile. Either way, `resourceUrlPrefix` is the URL prefix used to reference uploads in scenes (e.g., `/objects/`).
+
+**WebDAV** (used when `filesUrl` is set) — file operations go over HTTPS WebDAV against the configured endpoint, authenticated with the profile's `adminKey` as a bearer token:
+
+| Field | Description |
+|-------|-------------|
+| `filesUrl` | WebDAV endpoint for file operations (e.g., `https://files-name.example.com/`) |
+| `resourceUrlPrefix` | URL prefix for referencing uploads in scenes (e.g., `/objects/`) |
+
+**SCP/SSH** (used when `filesUrl` is absent) — file operations go over SFTP:
 
 | Field | Description |
 |-------|-------------|
@@ -51,6 +60,8 @@ Optional fields for resource upload/download via SCP:
 | `scpRemotePath` | Server path where files are written (supports `~`) |
 | `scpKeyPath` | Path to SSH private key (supports `~`) |
 | `resourceUrlPrefix` | URL prefix for referencing uploads in scenes (e.g., `/objects/`) |
+
+Hosts listed in `unsafeHosts` skip TLS certificate verification (self-signed certs, incomplete chains) for both the fabric socket and WebDAV requests.
 
 Multiple profiles can be defined (e.g., `"default"`, `"staging"`) and selected per-call via the `profile` parameter on any tool.
 
