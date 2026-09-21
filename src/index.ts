@@ -15,7 +15,7 @@ import {
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 
 import {
   createManifolderPromiseClient,
@@ -118,7 +118,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: Object.entries(allTools).map(([name, tool]) => ({
       name,
       description: tool.description,
-      inputSchema: zodToJsonSchema(tool.inputSchema),
+      inputSchema: z.toJSONSchema(tool.inputSchema),
     })),
   };
 });
