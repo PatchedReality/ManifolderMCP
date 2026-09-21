@@ -20,16 +20,16 @@
     "test:record-fixtures": "node test/integration/record-manifolder-fixtures.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "socket.io-client": "^4.7.0",
     "ssh2-sftp-client": "^12.1.1",
-    "ws": "^8.19.0",
+    "ws": "^8.21.3",
     "zod": "^3.23.0",
-    "zod-to-json-schema": "^3.23.0"
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.1",
     "@types/ssh2-sftp-client": "^9.0.0",
-    "typescript": "^5.6.0"
+    "typescript": "^7.0.2"
   }
 }
