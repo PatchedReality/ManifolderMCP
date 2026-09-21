@@ -24,8 +24,7 @@
     "socket.io-client": "^4.7.0",
     "ssh2-sftp-client": "^11.0.0",
     "ws": "^8.19.0",
-    "zod": "^4.6.5",
-    "zod-to-json-schema": "^3.23.0"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
