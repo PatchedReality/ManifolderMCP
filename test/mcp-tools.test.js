@@ -642,3 +642,25 @@ test('open_scene response includes objectType', async () => {
   assert.equal(payload.objectType, 'physical:default');
   assert.equal(payload.isAttachmentPoint, undefined);
 });
+
+test('scope config failure marks pre-dispatch details without dispatching a create', async () => {
+  const { handleCreateObject } = await import('../dist/tools/objects.js');
+  let writes = 0;
+  const client = createMockClient({
+    connectRoot: async () => { throw Object.assign(new Error('config unavailable'), {
+      code: 'FABRIC_CONFIG_FAILED',
+      details: { kind: 'http', httpStatus: 503, transportCode: 'UNKNOWN', retryable: true },
+    }); },
+    createObject: async () => { writes++; },
+  });
+  await assert.rejects(() => handleCreateObject(client, { url: 'https://example.com/fabric/', parentId: 'physical:1', name: 'test', objectType: 'physical:default' }), error => {
+    const result = serializeToolError(error);
+    assert.equal(result.code, 'SCOPE_CONNECT_FAILED');
+    assert.equal(result.details.phase, 'scope_connect');
+    assert.equal(result.details.mutationDispatched, false);
+    assert.equal(result.details.httpStatus, 503);
+    assert.equal(result.details.retryable, true);
+    return true;
+  });
+  assert.equal(writes, 0);
+});
