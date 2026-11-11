@@ -20,6 +20,13 @@ export interface ScopeTargetResolution {
   source: 'scopeId' | 'profile' | 'url' | 'fallback';
 }
 
+function connectionDetails(error: unknown): Record<string, unknown> | undefined {
+  const failure = error as { code?: string; details?: Record<string, unknown> } | null;
+  if (failure?.code !== 'FABRIC_CONFIG_FAILED' || !failure.details) return undefined;
+  const { kind, httpStatus, transportCode, retryable } = failure.details;
+  return { phase: 'scope_connect', mutationDispatched: false, kind, httpStatus, transportCode, retryable };
+}
+
 function countProvidedTargets(input: ScopeTargetInput): number {
   return [input.scopeId, input.profile, input.url].filter(Boolean).length;
 }
@@ -86,6 +93,7 @@ export async function resolveScopeTarget(
       throw toolError({
         code: 'SCOPE_CONNECT_FAILED',
         message,
+        details: connectionDetails(error),
       });
     }
   }
@@ -103,6 +111,7 @@ export async function resolveScopeTarget(
       throw toolError({
         code: 'SCOPE_CONNECT_FAILED',
         message: (error as Error).message,
+        details: connectionDetails(error),
       });
     }
   }
